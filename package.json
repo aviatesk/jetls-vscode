@@ -1,0 +1,281 @@
+{
+  "name": "jetls-client",
+  "displayName": "JETLS Client",
+  "description": "A new language server for Julia",
+  "author": "Shuhei Kadowaki",
+  "license": "MIT",
+  "version": "0.1.3",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aviatesk/JETLS.jl",
+    "directory": "jetls-client"
+  },
+  "homepage": "https://github.com/aviatesk/JETLS.jl/blob/master/jetls-client/README.md",
+  "bugs": {
+    "url": "https://github.com/aviatesk/JETLS.jl/issues"
+  },
+  "publisher": "aviatesk",
+  "extensionKind": [
+    "workspace"
+  ],
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters",
+    "Testing"
+  ],
+  "keywords": [
+    "Julia",
+    "JETLS",
+    "JET",
+    "language server"
+  ],
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "activationEvents": [
+    "onLanguage:julia",
+    "workspaceContains:Project.toml"
+  ],
+  "main": "./out/jetls-client",
+  "contributes": {
+    "commands": [
+      {
+        "command": "jetls-client.restartLanguageServer",
+        "title": "JETLS Client: Restart JETLS Language Server"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "JETLS configurations",
+      "properties": {
+        "jetls-client.executable": {
+          "scope": "resource",
+          "oneOf": [
+            {
+              "type": "object",
+              "markdownDescription": "Standard configuration (recommended for most users).",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "default": "jetls",
+                  "markdownDescription": "Path to the `jetls` executable. Default is `'jetls'` (`'jetls.exe'` on Windows) which expects the executable to be in your `PATH`."
+                },
+                "threads": {
+                  "type": "string",
+                  "default": "auto",
+                  "markdownDescription": "Number of Julia threads to use (used as `--threads=` option). Default is `'auto'`."
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "array",
+              "markdownDescription": "Advanced: Full command to launch JETLS from a local checkout.",
+              "items": {
+                "type": "string"
+              }
+            }
+          ],
+          "default": {
+            "path": "jetls",
+            "threads": "auto"
+          },
+          "markdownDescription": "JETLS executable configuration. Most users do not need to change this.\n\nUse object form `{path, threads}` to customize the installed JETLS executable path or thread setting.\n\nUse array form `[\"julia\", \"--startup-file=no\", \"--history-file=no\", \"--project=/path/to/JETLS\", \"-m\", \"JETLS\"]` to use a local JETLS checkout instead of globally installed executable.",
+          "order": 1
+        },
+        "jetls-client.communicationChannel": {
+          "scope": "resource",
+          "type": "string",
+          "enum": [
+            "auto",
+            "pipe",
+            "stdio",
+            "socket"
+          ],
+          "default": "auto",
+          "markdownDescription": "Communication channel for the language server:\n- `'auto'` (default) selects the best option based on environment\n- `'pipe'` for local development with stdout isolation\n- `'socket'` for network communication\n- `'stdio'` for maximum compatibility (but risk of stdout pollution).\n\nSee [Communication channels](https://aviatesk.github.io/JETLS.jl/dev/launching/#Communication-channels) documentation for more details.",
+          "order": 2
+        },
+        "jetls-client.socketPort": {
+          "scope": "resource",
+          "type": "number",
+          "default": 0,
+          "markdownDescription": "Port number for socket communication (`0` = auto-assign). Only used when `'socket'` communication channel is used.",
+          "order": 3
+        },
+        "jetls-client.settings": {
+          "scope": "resource",
+          "type": "object",
+          "default": {},
+          "markdownDescription": "JETLS server configuration settings. See [Configuration documentation](https://aviatesk.github.io/JETLS.jl/dev/configuration/) for detailed information.",
+          "properties": {
+            "full_analysis": {
+              "type": "object",
+              "markdownDescription": "Configuration for full JET analysis. See [Full analysis configuration](https://aviatesk.github.io/JETLS.jl/dev/configuration/#config/full_analysis).",
+              "properties": {
+                "debounce": {
+                  "type": "number",
+                  "default": 1,
+                  "minimum": 0,
+                  "markdownDescription": "Debounce time in seconds before triggering full analysis after a document change."
+                }
+              }
+            },
+            "formatter": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "Runic",
+                    "JuliaFormatter"
+                  ],
+                  "default": "Runic",
+                  "markdownDescription": "Preset formatter to use: `'Runic'` (default) or `'JuliaFormatter'`."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "custom": {
+                      "type": "object",
+                      "properties": {
+                        "executable": {
+                          "type": "string",
+                          "markdownDescription": "Path to custom formatter executable for document formatting."
+                        },
+                        "executable_range": {
+                          "type": "string",
+                          "markdownDescription": "Path to custom formatter executable for range formatting."
+                        }
+                      }
+                    }
+                  }
+                }
+              ],
+              "default": "Runic",
+              "markdownDescription": "Formatter configuration. Can be a preset name (`'Runic'` or `'JuliaFormatter'`) or a custom formatter object. See [Formatting configuration](https://aviatesk.github.io/JETLS.jl/dev/configuration/#config/formatter)."
+            },
+            "diagnostic": {
+              "type": "object",
+              "markdownDescription": "Diagnostic configuration. See [Diagnostic configuration](https://aviatesk.github.io/JETLS.jl/dev/configuration/#config/diagnostic).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "markdownDescription": "Enable or disable all JETLS diagnostics. When set to `false`, no diagnostic messages will be shown."
+                },
+                "patterns": {
+                  "type": "array",
+                  "default": [],
+                  "markdownDescription": "Fine-grained control over diagnostics through pattern matching. See [Pattern-based diagnostic configuration](https://aviatesk.github.io/JETLS.jl/dev/configuration/#config/diagnostic/patterns).",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "pattern",
+                      "match_by",
+                      "match_type",
+                      "severity"
+                    ],
+                    "properties": {
+                      "pattern": {
+                        "type": "string",
+                        "markdownDescription": "The pattern to match (e.g., `'lowering/unused-argument'` for code matching, or `'Macro name .*'` for message matching)."
+                      },
+                      "match_by": {
+                        "type": "string",
+                        "enum": [
+                          "code",
+                          "message"
+                        ],
+                        "markdownDescription": "What to match against:\n- `'code'`: Match against diagnostic codes (e.g., `'lowering/unused-argument'`)\n- `'message'`: Match against diagnostic message text"
+                      },
+                      "match_type": {
+                        "type": "string",
+                        "enum": [
+                          "literal",
+                          "regex"
+                        ],
+                        "markdownDescription": "How to interpret the pattern:\n- `'literal'`: Exact string match\n- `'regex'`: Regular expression match"
+                      },
+                      "severity": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "error",
+                              "warning",
+                              "warn",
+                              "information",
+                              "info",
+                              "hint",
+                              "off"
+                            ]
+                          },
+                          {
+                            "type": "number",
+                            "enum": [
+                              0,
+                              1,
+                              2,
+                              3,
+                              4
+                            ]
+                          }
+                        ],
+                        "markdownDescription": "Severity level:\n- `'error'`/`1`: Critical issues\n- `'warning'`/`'warn'`/`2`: Potential problems\n- `'information'`/`'info'`/`3`: Informational messages\n- `'hint'`/`4`: Suggestions\n- `'off'`/`0`: Disable"
+                      },
+                      "path": {
+                        "type": "string",
+                        "markdownDescription": "Optional glob pattern to restrict this configuration to specific files (e.g., `'test/**/*.jl'`). Patterns are matched against file paths relative to the workspace root. Supports globstar (`**`) for matching directories recursively."
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "testrunner": {
+              "type": "object",
+              "markdownDescription": "TestRunner integration configuration. See [TestRunner integration](https://aviatesk.github.io/JETLS.jl/dev/configuration/#config/testrunner).",
+              "properties": {
+                "executable": {
+                  "type": "string",
+                  "default": "testrunner",
+                  "markdownDescription": "Path to the TestRunner.jl executable. If not set, uses `'testrunner'` from `PATH`."
+                }
+              }
+            }
+          },
+          "order": 0
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js --production",
+    "build:watch": "node esbuild.js --watch",
+    "check": "npm run check:tsc && npm run check:lint",
+    "check:tsc": "tsc --noEmit",
+    "check:lint": "eslint",
+    "clean": "rm -rf out *.vsix",
+    "vscode:prepublish": "npm run check && npm run build"
+  },
+  "dependencies": {
+    "glob": "^11.0.0",
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@stylistic/eslint-plugin": "^2.9.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20",
+    "@types/vscode": "^1.75.1",
+    "@vscode/test-electron": "^2.3.9",
+    "esbuild": "^0.25.10",
+    "eslint": "^9.13.0",
+    "fs": "^0.0.1-security",
+    "mocha": "^10.3.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.16.0"
+  },
+  "private": true
+}
