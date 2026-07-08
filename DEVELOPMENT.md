@@ -66,6 +66,21 @@ use an already installed custom executable instead, specify `path` explicitly:
 
 An object that omits `path` continues to use the managed installation.
 
+## Adding server execute commands
+
+The client registers `jetls.*` commands once at the extension level and routes
+each invocation to the owning server, because per-folder servers cannot each
+register the same VS Code command. The registration comes from the static
+`SERVER_EXECUTE_COMMANDS` list in
+[`language-client-routing.ts`](./src/language-client-routing.ts), not from the
+commands the server advertises at runtime, and an invocation is routed by the
+document URI in its first argument.
+
+When the server adds a command to `SUPPORTED_COMMANDS` in
+[`src/execute-command.jl`](https://github.com/aviatesk/JETLS.jl/blob/master/src/execute-command.jl),
+also add it to that list. Without it, invoking the command fails as an unknown
+VS Code command.
+
 ## Configuration schema sync
 
 The generated blocks of [`package.json`](./package.json) (the

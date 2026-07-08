@@ -54,12 +54,13 @@ export function isManagedExecutable(executable: ExecutableConfig): boolean {
 
 export function affectsServerConfig(
   event: vscode.ConfigurationChangeEvent,
+  resource?: vscode.Uri,
 ): boolean {
   return (
-    event.affectsConfiguration("jetls-client.executable") ||
-    event.affectsConfiguration("jetls-client.managedStoragePath") ||
-    event.affectsConfiguration("jetls-client.communicationChannel") ||
-    event.affectsConfiguration("jetls-client.socketPort") ||
-    event.affectsConfiguration("jetls-client.initializationOptions")
+    event.affectsConfiguration("jetls-client.executable", resource) ||
+    event.affectsConfiguration("jetls-client.managedStoragePath", resource) ||
+    event.affectsConfiguration("jetls-client.communicationChannel", resource) ||
+    event.affectsConfiguration("jetls-client.socketPort", resource) ||
+    event.affectsConfiguration("jetls-client.initializationOptions", resource)
   );
 }
