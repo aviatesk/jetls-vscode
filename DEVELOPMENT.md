@@ -119,14 +119,13 @@ To release the extension:
    pinned release tag exists, sets the version in
    [`package.json`](./package.json) and
    [`package-lock.json`](./package-lock.json), renames the
-   [`CHANGELOG.md`](./CHANGELOG.md) `Unreleased` section to the
-   release version (recording the pinned JETLS release in it and
-   re-creating an empty `Unreleased` section), updates the version
-   placeholder in the
-   [bug-report issue template](./.github/ISSUE_TEMPLATE/bug-report.yml),
-   creates the `release: vYYYY.M.D` commit, and opens a pull request
-   against `master`. Use `--no-push` to prepare the branch locally
-   without pushing or opening the PR.
+   [`CHANGELOG.md`](./CHANGELOG.md) `Unreleased` section to the release version
+   (recording the pinned JETLS release in it and re-creating an empty
+   `Unreleased` section), updates the version placeholder in the
+   [bug-report issue template](./.github/ISSUE_TEMPLATE/bug-report.yml), creates
+   the `vYYYY.M.D` release commit, and opens a pull request against `master`.
+   Use `--no-push` to prepare the branch locally without pushing or opening the
+   PR.
 
    After a JETLS server release, this step runs automatically:
    [`server-release.yml`](./.github/workflows/server-release.yml)

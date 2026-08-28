@@ -44,28 +44,27 @@ keep the maximum line length under _80 characters_.
 
 ## Commit message formatting
 
-When writing commit messages, follow the format "component: Brief summary" for
-the title.
+When writing commit messages, write the title as a brief summary in imperative
+mood, without a component prefix.
 
 In the body, write paragraphs in this order:
 
-1. Explain the concrete problem or user-visible limitation being fixed.
-   If appropriate, include a small code example when it makes the issue
-   clearer.
+1. Explain the concrete problem or user-visible limitation being fixed. If
+   appropriate, include a small code example when it makes the issue clearer.
 2. Explain the approach used to fix the problem.
 3. Mention important caveats, follow-up work, performance notes, or test
    coverage when relevant.
 
-Use backticks for code elements (function names, variables, file paths, etc.)
-to improve readability.
+Use backticks for code elements (function names, variables, file paths, etc.) to
+improve readability.
 
-Ensure that the maximum line length never exceeds 72 characters.
-When referencing external GitHub PRs or issues, use proper GitHub interlinking
-format (e.g., "owner/repo#123" for PRs/issues).
-Finally, if you write code yourself, include a co-author trailer at the end
-of the commit message, e.g.: `Co-Authored-By: GPT-5.6 <noreply@openai.com>`
-(adjust the model name as appropriate). However, when simply asked to write
-a commit message, there's no need to add that trailer.
+Ensure that the maximum line length never exceeds 72 characters. When
+referencing external GitHub PRs or issues, use proper GitHub interlinking format
+(e.g., "owner/repo#123" for PRs/issues). Finally, if you write code yourself,
+include a co-author trailer at the end of the commit message, e.g.:
+`Co-Authored-By: GPT-5.6 <noreply@openai.com>` (adjust the model name as
+appropriate). However, when simply asked to write a commit message, there's no
+need to add that trailer.
 
 # Coding rules
 

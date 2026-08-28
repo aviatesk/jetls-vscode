@@ -9,18 +9,17 @@ description: >-
 
 ## Title format
 
-Use "component: Brief summary" format and imperative mood for the commit
-title.
+Write the title as a brief summary in imperative mood, without a `component:`
+prefix.
 
 Examples:
 
-- "managed-installation: Recover from a broken current generation"
-- "status-bar: Keep the spinner until the server is ready"
-- "ci: Update GitHub Actions workflow"
+- "Recover from a broken current generation"
+- "Keep the spinner until the server is ready"
+- "Update GitHub Actions workflows"
 
-The history extracted from the JETLS.jl monorepo uses `jetls-client` as
-the component; in this standalone repository, prefer the finer-grained
-component instead (the source module, `release`, `ci`).
+The history extracted from the JETLS.jl monorepo predates this rule and uses
+`jetls-client:` (and other component) prefixes.
 
 ## Body
 

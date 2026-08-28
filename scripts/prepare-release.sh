@@ -223,7 +223,7 @@ fi
 
 echo "==> Step 7: Committing the release"
 git add package.json package-lock.json "$CHANGELOG" "$MANIFEST" "$BUG_REPORT"
-git commit -m "release: v$VERSION"
+git commit -m "v$VERSION"
 
 if [[ "$NO_PUSH" == true ]]; then
     echo ""
@@ -246,7 +246,7 @@ Merging this PR publishes the extension to the Marketplace, pushes the \`$TAG\` 
 PR_URL=$(gh pr create \
     --base master \
     --head "$BRANCH" \
-    --title "release: v$VERSION" \
+    --title "Release v$VERSION" \
     --body "$PR_BODY")
 
 echo ""
