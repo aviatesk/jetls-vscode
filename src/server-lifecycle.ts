@@ -10,7 +10,11 @@ import {
 } from "vscode-languageclient/node";
 
 import { CoalescingTaskRunner } from "./coalescing-task-runner";
-import { JETLS_CLIENT_SETTINGS_SECTION, TIMEOUTS } from "./constants";
+import {
+  JETLS_CLIENT_SETTINGS_SECTION,
+  MINIMUM_CUSTOM_JETLS_REVISION,
+  TIMEOUTS,
+} from "./constants";
 import {
   ensureManagedJETLS,
   invalidateInstallStamp,
@@ -29,6 +33,7 @@ import {
 import {
   JETLSCommands,
   resolveJETLSCommands,
+  UnsupportedJETLSVersionError,
   VersionPreflight,
 } from "./preflight";
 import { StartupStatusBar } from "./status-bar";
@@ -66,6 +71,7 @@ const versionPreflight = new VersionPreflight({
   timeoutMs: TIMEOUTS.precompilation,
   terminationTimeoutMs: TIMEOUTS.processTermination,
   platform: process.platform,
+  minimumRevision: MINIMUM_CUSTOM_JETLS_REVISION,
   appendLine: (message) => outputChannel.appendLine(message),
   onPrecompiling: () => statusBar.show("precompiling"),
 });
@@ -140,6 +146,26 @@ function handleManagedServerFailure(err: Error, depotPath: string): void {
     );
   });
   showManagedFailureNotification(err);
+}
+
+// Handles a custom executable that predates the launch arguments this
+// client uses: without the preflight gate the server would reject the
+// arguments and the start would only fail as an opaque timeout.
+function handleUnsupportedExecutable(err: UnsupportedJETLSVersionError): void {
+  outputChannel.appendLine(
+    `[jetls-client] Failed to start JETLS: ${err.message}`,
+  );
+  const settingsButton = "Open settings";
+  void vscode.window
+    .showErrorMessage(err.message, settingsButton)
+    .then((selection) => {
+      if (selection === settingsButton) {
+        void vscode.commands.executeCommand(
+          "workbench.action.openSettings",
+          "jetls-client.executable",
+        );
+      }
+    });
 }
 
 // Handles spawn errors of custom executable configurations.
@@ -388,7 +414,11 @@ async function startLanguageServer() {
       // surface here and let the rerun repaint the status from "checking".
       if (!deactivating && !restartRunner.pending) {
         statusBar.show("failed");
-        handleSpawnError(error, baseCommand);
+        if (error instanceof UnsupportedJETLSVersionError) {
+          handleUnsupportedExecutable(error);
+        } else {
+          handleSpawnError(error, baseCommand);
+        }
       }
       throw error;
     }
