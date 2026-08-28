@@ -452,13 +452,15 @@
   "scripts": {
     "build": "node scripts/esbuild.js --production",
     "build:watch": "node scripts/esbuild.js --watch",
-    "check": "npm run check:tsc && npm run check:lint && npm run check:package-schema",
+    "check": "npm run check:tsc && npm run check:lint && npm run check:format && npm run check:package-schema",
     "check:tsc": "tsc --noEmit",
     "check:lint": "eslint",
+    "check:format": "prettier --check .",
     "check:package-schema": "node scripts/check-package-schema.mjs",
     "test": "node scripts/test-runner.mjs",
     "clean": "rm -rf out *.vsix",
     "sync-schemas": "node scripts/sync-schemas.mjs",
+    "format": "prettier --write .",
     "vscode:prepublish": "npm run check && npm test && npm run build"
   },
   "dependencies": {
@@ -467,7 +469,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
-    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^26.1.0",
     "@types/vscode": "^1.96.0",
     "@types/which": "^3.0.4",
@@ -477,6 +478,7 @@
     "esbuild": "^0.28.0",
     "eslint": "^10.6.0",
     "globals": "^17.11.0",
+    "prettier": "^3.9.6",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.62.1"
   },

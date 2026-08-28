@@ -10,15 +10,17 @@ the release process. Consult it before working on those areas.
 
 ## Code formatting
 
-- When writing TypeScript or JavaScript code, use _2 whitespaces_ for
-  indentation and double quotes for strings, and try to keep the maximum
-  line length under _80 characters_.
-- AI agents must not run automated formatters unless explicitly requested by a
-  human in the current conversation.
-  This includes file-wide or project-wide formatting commands and
-  editor-integrated formatting tools.
-  When editing code, preserve the surrounding formatting and make only minimal
-  local edits. If formatting seems necessary, ask before applying it.
+Formatting is enforced by [Prettier](https://prettier.io) with its
+default settings (2-space indentation, double quotes, 80-column print
+width), covering TypeScript/JavaScript sources, configuration files
+(JSON, YAML), and Markdown. Run `npm run format` after editing;
+`npm run check` fails when files are not formatted.
+`package.json` and `package-lock.json` are excluded: they must stay
+byte-stable under `JSON.stringify(..., 2)` round-tripping (see
+[`.prettierignore`](./.prettierignore)).
+
+Prettier does not wrap Markdown prose (`proseWrap` is `preserve`), so
+the line-length rule below still applies when writing Markdown text.
 
 ## File names
 
@@ -28,6 +30,7 @@ For file names, use `-` (hyphen) as the word separator.
 
 When writing Markdown text, use _2 whitespaces_ for indentation and try to
 keep the maximum line length under _80 characters_.
+
 - Exception: [`CHANGELOG.md`](./CHANGELOG.md) is exempt from line length
   rules since it is used for GitHub release notes, where hard line breaks
   disrupt rendering.
