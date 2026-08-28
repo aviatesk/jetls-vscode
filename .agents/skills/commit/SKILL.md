@@ -30,10 +30,10 @@ is needed, briefly state the motivation and implementation.
 Organize body paragraphs in this order and omit any paragraph that is not
 relevant:
 
-1. Explain the concrete problem, limitation, or goal motivating the change.
-   For user-facing work, describe the resulting capability or behavior. For
-   internal work, explain the engineering reason without inventing a
-   user-visible impact. Include a small code example when it adds clarity.
+1. Explain the concrete problem, limitation, or goal motivating the change. For
+   user-facing work, describe the resulting capability or behavior. For internal
+   work, explain the engineering reason without inventing a user-visible impact.
+   Include a small code example when it adds clarity.
 2. Explain the approach used to implement the change.
 3. Mention important caveats, follow-up work, performance notes, or test
    coverage when relevant.
@@ -50,17 +50,17 @@ Use backticks for code elements such as function names, variables, and paths.
 
 ## Line length
 
-Ensure the maximum line length never exceeds 72 characters.
-Never rely on Git or an editor to wrap the message automatically.
+Ensure the maximum line length never exceeds 72 characters. Never rely on Git or
+an editor to wrap the message automatically.
 
 Before every commit, write the complete message to a uniquely named temporary
 file with explicit line breaks, then commit with
-`GIT_EDITOR=true git -c core.hooksPath=.githooks commit -F <message-file>`.
-Do not use repeated `git commit -m` arguments for a multi-paragraph message.
+`GIT_EDITOR=true git -c core.hooksPath=.githooks commit -F <message-file>`. Do
+not use repeated `git commit -m` arguments for a multi-paragraph message.
 
 The command-local `core.hooksPath` setting automatically runs the tracked
-`commit-msg` hook and rejects lines longer than 72 characters.
-Never use `--no-verify` to bypass it.
+`commit-msg` hook and rejects lines longer than 72 characters. Never use
+`--no-verify` to bypass it.
 
 ## GitHub references
 
@@ -69,8 +69,8 @@ format: "owner/repo#123".
 
 ## Co-author trailer
 
-If you wrote code yourself, include a co-author trailer at the end of the
-commit message, for example:
+If you wrote code yourself, include a co-author trailer at the end of the commit
+message, for example:
 
 `Co-Authored-By: GPT-5.6 Sol <noreply@openai.com>`
 
@@ -80,8 +80,7 @@ message without having written the code, do not add the trailer.
 ## Examples
 
 The examples below are from real history (predating the split out of the
-monorepo, hence the `jetls-client` component); co-author trailers are
-omitted.
+monorepo, hence the `jetls-client` component); co-author trailers are omitted.
 
 ### Feature addition
 

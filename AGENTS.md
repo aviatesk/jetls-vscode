@@ -2,25 +2,27 @@
 
 This repository contains `jetls-client`, the VSCode client extension for
 [JETLS](https://github.com/aviatesk/JETLS.jl).
-[DEVELOPMENT.md](./DEVELOPMENT.md) describes the development workflows:
-setup, testing the extension locally, the configuration schema sync, and
-the release process. Consult it before working on those areas.
+[DEVELOPMENT.md](./DEVELOPMENT.md) describes the development workflows: setup,
+testing the extension locally, the configuration schema sync, and the release
+process. Consult it before working on those areas.
 
 # Formatting
 
 ## Code formatting
 
-Formatting is enforced by [Prettier](https://prettier.io) with its
-default settings (2-space indentation, double quotes, 80-column print
-width), covering TypeScript/JavaScript sources, configuration files
-(JSON, YAML), and Markdown. Run `npm run format` after editing;
+Formatting is enforced by [Prettier](https://prettier.io) (2-space indentation,
+double quotes, 80-column print width), covering TypeScript/JavaScript sources,
+configuration files (JSON, YAML), and Markdown. Markdown prose is wrapped at the
+print width (`proseWrap: "always"` in [`.prettierrc`](./.prettierrc)), so the
+Markdown line-length rule is machine-enforced; YAML keeps authored line breaks
+in long strings (a `preserve` override), since workflow expressions and
+conditions read better hand-wrapped. Run `npm run format` after editing;
 `npm run check` fails when files are not formatted.
-`package.json` and `package-lock.json` are excluded: they must stay
-byte-stable under `JSON.stringify(..., 2)` round-tripping (see
-[`.prettierignore`](./.prettierignore)).
 
-Prettier does not wrap Markdown prose (`proseWrap` is `preserve`), so
-the line-length rule below still applies when writing Markdown text.
+[`.prettierignore`](./.prettierignore) excludes `package.json` and
+`package-lock.json` (they must stay byte-stable under `JSON.stringify(..., 2)`
+round-tripping), `CHANGELOG.md` (entries stay on one line for release notes),
+and `LICENSE.md` (verbatim license text).
 
 ## File names
 
@@ -28,17 +30,17 @@ For file names, use `-` (hyphen) as the word separator.
 
 ## Markdown formatting
 
-When writing Markdown text, use _2 whitespaces_ for indentation and try to
-keep the maximum line length under _80 characters_.
+When writing Markdown text, use _2 whitespaces_ for indentation and try to keep
+the maximum line length under _80 characters_.
 
-- Exception: [`CHANGELOG.md`](./CHANGELOG.md) is exempt from line length
-  rules since it is used for GitHub release notes, where hard line breaks
-  disrupt rendering.
+- Exception: [`CHANGELOG.md`](./CHANGELOG.md) is exempt from line length rules
+  since it is used for GitHub release notes, where hard line breaks disrupt
+  rendering.
 - Additionally, prioritize simple text style and limit unnecessary decorations
   (e.g. `**`) to only truly necessary locations. This is a style that should
   generally be aimed for, but pay particular attention when writing Markdown.
-- Headers should use sentence case (only the first word capitalized), not
-  title case. For example:
+- Headers should use sentence case (only the first word capitalized), not title
+  case. For example:
   - Good: `## Conclusion and alternative approaches`
   - Bad: `## Conclusion And Alternative Approaches`
 
@@ -70,20 +72,19 @@ need to add that trailer.
 
 ## Updating `package.json` and `JETLS_VERSION.json`
 
-These files participate in the release process and parts of them are
-generated; consult [DEVELOPMENT.md](./DEVELOPMENT.md) before editing them.
+These files participate in the release process and parts of them are generated;
+consult [DEVELOPMENT.md](./DEVELOPMENT.md) before editing them.
 
-- [`package.json`](./package.json) contains generated configuration blocks
-  (the `properties` of `jetls-client.settings` and the
-  `jetls-client.initializationOptions` schema): they mirror the JETLS
-  server's config structs. Never edit them by hand; when they need
-  updating, follow the
+- [`package.json`](./package.json) contains generated configuration blocks (the
+  `properties` of `jetls-client.settings` and the
+  `jetls-client.initializationOptions` schema): they mirror the JETLS server's
+  config structs. Never edit them by hand; when they need updating, follow the
   [schema sync procedure](./DEVELOPMENT.md#configuration-schema-sync).
 
-- When touching [`JETLS_VERSION.json`](./JETLS_VERSION.json), keep the
-  julia bounds mirroring the pinned JETLS release's `julia` compat entry,
-  as described in [Publishing](./DEVELOPMENT.md#publishing); CI and the
-  release script check this correspondence.
+- When touching [`JETLS_VERSION.json`](./JETLS_VERSION.json), keep the julia
+  bounds mirroring the pinned JETLS release's `julia` compat entry, as described
+  in [Publishing](./DEVELOPMENT.md#publishing); CI and the release script check
+  this correspondence.
 
 ## Comments guideline
 
@@ -104,8 +105,8 @@ npm run check
 ```
 
 This runs the TypeScript compiler, ESLint, and the
-[`package.json`](./package.json) schema validation. It is run in CI and
-will cause failures if new problems are introduced.
+[`package.json`](./package.json) schema validation. It is run in CI and will
+cause failures if new problems are introduced.
 
 # Running test
 
@@ -130,9 +131,9 @@ ask for clarification.
 
 Only perform a Git operation that modifies repository state when the user
 explicitly requests it. Treat each such request as authorization for one write
-operation: after completing it, do not perform another write operation until
-the user explicitly requests one. Read-only Git operations and other
-non-mutating work may continue in the meantime.
+operation: after completing it, do not perform another write operation until the
+user explicitly requests one. Read-only Git operations and other non-mutating
+work may continue in the meantime.
 
 If the user provides feedback on a commit, do not automatically amend it or
 create a fixup commit. Explain what could change and wait for explicit

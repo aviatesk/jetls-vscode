@@ -6,33 +6,32 @@
 A [VSCode](https://code.visualstudio.com/) client extension for
 [JETLS](https://github.com/aviatesk/JETLS.jl).
 
-JETLS is a new language server for [Julia](https://julialang.org/).
-JETLS aims to enhance developer productivity by providing advanced static
-analysis and seamless integration with the Julia runtime.
-By leveraging tooling technologies like
-[JET.jl](https://github.com/aviatesk/JET.jl),
+JETLS is a new language server for [Julia](https://julialang.org/). JETLS aims
+to enhance developer productivity by providing advanced static analysis and
+seamless integration with the Julia runtime. By leveraging tooling technologies
+like [JET.jl](https://github.com/aviatesk/JET.jl),
 [JuliaSyntax.jl](https://github.com/JuliaLang/julia/tree/master/JuliaSyntax) and
 [JuliaLowering.jl](https://github.com/JuliaLang/julia/tree/master/JuliaLowering),
 JETLS aims to offer enhanced language features such as type-sensitive
 diagnostic, macro-aware go-to definition and such.
 
-> [!note]
-> JETLS.jl is not integrated with the [`julia-vscode` extension](https://www.julia-vscode.org/) yet.
-> To use JETLS from VSCode, install this `jetls-client` extension.
-> While we generally recommend disabling `julia-vscode` when using `jetls-client`,
-> this is not required; you can use both `julia-vscode` and `jetls-client`
-> in the same VSCode session.
-> However, since the LSP features provided by JETLS.jl differ in both type and quality
-> from those provided by `julia-vscode`'s language server backend
-> ([LanguageServer.jl](https://github.com/julia-vscode/LanguageServer.jl)),
-> you may encounter confusing situations where, for example, completion candidates
+> [!note] JETLS.jl is not integrated with the
+> [`julia-vscode` extension](https://www.julia-vscode.org/) yet. To use JETLS
+> from VSCode, install this `jetls-client` extension. While we generally
+> recommend disabling `julia-vscode` when using `jetls-client`, this is not
+> required; you can use both `julia-vscode` and `jetls-client` in the same
+> VSCode session. However, since the LSP features provided by JETLS.jl differ in
+> both type and quality from those provided by `julia-vscode`'s language server
+> backend
+> ([LanguageServer.jl](https://github.com/julia-vscode/LanguageServer.jl)), you
+> may encounter confusing situations where, for example, completion candidates
 > are provided from different backends.
 
 ## Requirements
 
 - [VSCode](https://code.visualstudio.com/) v1.96.0 or higher
-- [Julia](https://julialang.org/downloads) v1.12.2 through 1.13.x, with
-  the `julia` command available on `PATH`
+- [Julia](https://julialang.org/downloads) v1.12.2 through 1.13.x, with the
+  `julia` command available on `PATH`
 
 JETLS does not support Julia 1.12.1 or earlier, nor Julia 1.14+/nightly.
 
@@ -47,27 +46,26 @@ No separate JETLS installation is required. On first use, the extension
 automatically installs a compatible JETLS server. It updates the server when an
 extension update requires a newer version.
 
-The extension stores JETLS separately from packages in your regular Julia
-depot. Different Julia installations and Julia minor versions use separate
-managed copies, and copies for a Julia you stopped using are removed
-automatically after a while. You do not need to configure or maintain this
-storage.
+The extension stores JETLS separately from packages in your regular Julia depot.
+Different Julia installations and Julia minor versions use separate managed
+copies, and copies for a Julia you stopped using are removed automatically after
+a while. You do not need to configure or maintain this storage.
 
-The first installation and each managed update require network access.
-Once installed, the cached server can start while offline. The status bar shows
+The first installation and each managed update require network access. Once
+installed, the cached server can start while offline. The status bar shows
 whether managed JETLS is being checked, installed, started, or has failed, and
 installations show a progress notification from which they can be cancelled.
 
-The extension launches only the exact JETLS version its release pins. When
-that version cannot be installed or verified — for example, while offline —
-startup fails with an error notification. The notification offers to retry
-and to show the JETLS output, which records the full details; clicking the
-failed status bar item opens the same output.
+The extension launches only the exact JETLS version its release pins. When that
+version cannot be installed or verified — for example, while offline — startup
+fails with an error notification. The notification offers to retry and to show
+the JETLS output, which records the full details; clicking the failed status bar
+item opens the same output.
 
 To recover from a broken managed installation, run
-`JETLS Client: Reinstall Server` from the Command Palette.
-The command asks for confirmation and installs a fresh copy, which
-requires network access; superseded copies are cleaned up automatically.
+`JETLS Client: Reinstall Server` from the Command Palette. The command asks for
+confirmation and installs a fresh copy, which requires network access;
+superseded copies are cleaned up automatically.
 
 ## Launching configuration (advanced)
 
@@ -77,8 +75,8 @@ through the `jetls-client.executable` setting:
 
 - To customize the managed server launch, use the object form with `path`
   omitted; the optional `threads` and `env` fields control the launch. For
-  example, if you use [juliaup](https://github.com/JuliaLang/juliaup),
-  select the Julia channel by setting `JULIAUP_CHANNEL`:
+  example, if you use [juliaup](https://github.com/JuliaLang/juliaup), select
+  the Julia channel by setting `JULIAUP_CHANNEL`:
 
   ```json
   {
@@ -91,11 +89,11 @@ through the `jetls-client.executable` setting:
   }
   ```
 
-  This takes effect when the default `julia` command resolves to the
-  juliaup launcher.
+  This takes effect when the default `julia` command resolves to the juliaup
+  launcher.
 
-  To select a Julia executable other than the default `julia` command,
-  set `JULIA_APPS_JULIA_CMD`:
+  To select a Julia executable other than the default `julia` command, set
+  `JULIA_APPS_JULIA_CMD`:
 
   ```json
   {
@@ -107,13 +105,12 @@ through the `jetls-client.executable` setting:
   }
   ```
 
-  The command must be the Julia executable itself (on Windows,
-  `julia.exe` rather than a `.bat`/`.cmd` wrapper), since the managed
-  installation launches it directly; `JULIAUP_CHANNEL` is ignored in
-  this case.
+  The command must be the Julia executable itself (on Windows, `julia.exe`
+  rather than a `.bat`/`.cmd` wrapper), since the managed installation launches
+  it directly; `JULIAUP_CHANNEL` is ignored in this case.
 
-- To use a JETLS binary you manage yourself, specify its `path`.
-  This bypasses managed installation and updates:
+- To use a JETLS binary you manage yourself, specify its `path`. This bypasses
+  managed installation and updates:
 
   ```json
   {
@@ -123,8 +120,8 @@ through the `jetls-client.executable` setting:
   }
   ```
 
-- To develop JETLS from a local checkout, provide the full launch command
-  as an array. This also bypasses managed installation:
+- To develop JETLS from a local checkout, provide the full launch command as an
+  array. This also bypasses managed installation:
 
   ```json
   {
@@ -154,23 +151,24 @@ based on your environment:
 For most users, this automatic selection provides optimal performance and
 reliability without requiring manual configuration.
 
-You can override the automatic selection using `"jetls-client.communicationChannel": string`:
+You can override the automatic selection using
+`"jetls-client.communicationChannel": string`:
 
 - `"auto"` (default): Automatic selection as described above
 - `"pipe"`: Uses Unix domain socket/named pipe
-- `"socket"`: Uses TCP socket (configure port with `"jetls-client.socketPort": number`,
-  default `0` for auto-assign)
+- `"socket"`: Uses TCP socket (configure port with
+  `"jetls-client.socketPort": number`, default `0` for auto-assign)
 - `"stdio"`: Uses standard input/output
 
 For detailed information about each communication channel and when to use them,
-see the [Communication channels documentation](https://aviatesk.github.io/JETLS.jl/release/launching/#Communication-channels).
+see the
+[Communication channels documentation](https://aviatesk.github.io/JETLS.jl/release/launching/#Communication-channels).
 
 ### Initialization options
 
 Static options that are sent to JETLS during startup can be configured through
 VSCode's `settings.json` file using the `"jetls-client.initializationOptions"`
-section.
-These settings require a server restart to take effect.
+section. These settings require a server restart to take effect.
 
 For detailed initialization options and examples, see the
 [Initialization options documentation](https://aviatesk.github.io/JETLS.jl/release/launching/#init-options).
@@ -192,8 +190,8 @@ For detailed initialization options and examples, see the
 
 ## Configuring JETLS
 
-JETLS behavior (diagnostics, formatting, etc.) can be configured through VSCode's
-`settings.json` file using the `jetls-client.settings` section.
+JETLS behavior (diagnostics, formatting, etc.) can be configured through
+VSCode's `settings.json` file using the `jetls-client.settings` section.
 
 For detailed configuration options and examples, see the
 [Configuration documentation](https://aviatesk.github.io/JETLS.jl/release/configuration/).
