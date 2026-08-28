@@ -17,7 +17,7 @@ body:
     attributes:
       label: Extension version
       description: The jetls-client version shown in the VSCode Extensions view.
-      placeholder: "v2026.8.28"
+      placeholder: "v2026.8.29"
     validations:
       required: true
 
