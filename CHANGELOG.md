@@ -10,6 +10,10 @@ and this project uses [calendar versioning](https://calver.org/) (`YYYY.M.D`, th
 - Commit: [`HEAD`](https://github.com/aviatesk/jetls-vscode/commit/HEAD)
 - Diff: [`v2026.8.29...HEAD`](https://github.com/aviatesk/jetls-vscode/compare/v2026.8.29...HEAD)
 
+### Added
+
+- Added automatic publishing to [Open VSX](https://open-vsx.org/extension/aviatesk/jetls-client): releases now reach Open VSX together with the VSCode Marketplace, so VSCodium and other Open VSX-based editors receive updates without delay.
+
 ## v2026.8.29
 
 - Commit: [`v2026.8.29`](https://github.com/aviatesk/jetls-vscode/commit/v2026.8.29)

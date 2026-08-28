@@ -80,9 +80,10 @@ jobs:
       - name: Package the extension
         run: npx vsce package
       # The steps below are idempotent so a failed run can be re-run from
-      # any point: the Marketplace publish skips an already-published
-      # version, the tag push skips an existing tag, and the release
-      # creation skips an existing release.
+      # any point: the publishes skip an already-published version, the
+      # tag push skips an existing tag, and the release creation skips an
+      # existing release. Open VSX comes last so its availability cannot
+      # block the tag or the GitHub release.
       - name: Publish to the Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -116,3 +117,9 @@ jobs:
             --title "$TAG" \
             --notes "$NOTES" \
             "jetls-client-$VERSION.vsix"
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          VERSION="${HEAD_REF#releases/v}"
+          npx ovsx publish --skip-duplicate --packagePath "jetls-client-$VERSION.vsix" -p "$OVSX_PAT"

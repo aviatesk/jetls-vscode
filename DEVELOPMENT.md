@@ -136,12 +136,16 @@ To release the extension:
    pinned server release exists, and the release tag is not taken yet.
 3. Merge the pull request. The merge triggers the publish workflow, which
    packages the extension, publishes it to the Marketplace, pushes the
-   `vYYYY.M.D` tag, and creates the GitHub release with the packaged `.vsix`
-   attached. The release branch can be deleted after merging.
+   `vYYYY.M.D` tag, creates the GitHub release with the packaged `.vsix`
+   attached, and publishes to
+   [Open VSX](https://open-vsx.org/extension/aviatesk/jetls-client). The release
+   branch can be deleted after merging.
 
 Publishing authenticates with the `VSCE_PAT` repository secret: an Azure DevOps
 personal access token with the Marketplace "Manage" scope. The token has an
-expiry and must be rotated before it lapses. The automated PR flow additionally
+expiry and must be rotated before it lapses. The Open VSX publish uses the
+`OVSX_PAT` secret: an [open-vsx.org](https://open-vsx.org) access token for the
+`aviatesk` namespace (no forced expiry). The automated PR flow additionally
 needs the `RELEASE_PR_TOKEN` secret: a GitHub personal access token with
 `contents` and `pull-requests` write access to this repository, since pushes and
 pull requests created with the default workflow token do not trigger CI. The
