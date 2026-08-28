@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 
 import { build } from "esbuild";
 
-const rootDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rootDirectory = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const testDirectory = path.join(rootDirectory, "test");
 
 async function runNodeTests(testFiles) {

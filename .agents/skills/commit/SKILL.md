@@ -13,6 +13,7 @@ Use "component: Brief summary" format and imperative mood for the commit
 title.
 
 Examples:
+
 - "managed-installation: Recover from a broken current generation"
 - "status-bar: Keep the spinner until the server is ready"
 - "ci: Update GitHub Actions workflow"

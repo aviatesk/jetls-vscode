@@ -6,6 +6,7 @@ extension for [JETLS](https://github.com/aviatesk/JETLS.jl).
 ## Development setup
 
 1. Install dependencies:
+
    ```bash
    npm install
    ```
@@ -36,7 +37,8 @@ To use a local JETLS.jl checkout with the development extension (see
 [Using local JETLS checkout](https://github.com/aviatesk/JETLS.jl/blob/master/DEVELOPMENT.md#using-local-jetls-checkout)),
 explicitly configure `jetls-client.executable` in your `settings.json`
 using the array form:
-```jsonc
+
+```json
 {
   "jetls-client.executable": [
     "julia",
@@ -54,7 +56,7 @@ The array form is a full custom command and bypasses managed
 installation. To use an already installed custom executable instead,
 specify `path` explicitly:
 
-```jsonc
+```json
 {
   "jetls-client.executable": {
     "path": "/absolute/path/to/jetls",
@@ -106,9 +108,11 @@ calendar versions sort after them, so updates keep flowing.
 To release the extension:
 
 1. Prepare the release branch and pull request:
+
    ```bash
    ./scripts/prepare-release.sh [--pin YYYY-MM-DD] YYYY.M.D
    ```
+
    The script branches `releases/vYYYY.M.D` off `origin/master`,
    optionally updates the pin in `JETLS_VERSION.json` (re-syncing the
    `package.json` schemas from the pinned release), validates that the
@@ -132,6 +136,7 @@ To release the extension:
    release PR appears without manual work. The workflow can also be
    started manually via `workflow_dispatch` with the server version
    as input.
+
 2. Wait for CI to pass on the pull request. The regular checks run on
    it, and [`release.yml`](./.github/workflows/release.yml) verifies
    the release invariants: the branch name matches `package.json` and

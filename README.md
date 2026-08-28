@@ -80,7 +80,7 @@ through the `jetls-client.executable` setting:
   example, if you use [juliaup](https://github.com/JuliaLang/juliaup),
   select the Julia channel by setting `JULIAUP_CHANNEL`:
 
-  ```jsonc
+  ```json
   {
     "jetls-client.executable": {
       "threads": "1", // the default is "auto"
@@ -97,7 +97,7 @@ through the `jetls-client.executable` setting:
   To select a Julia executable other than the default `julia` command,
   set `JULIA_APPS_JULIA_CMD`:
 
-  ```jsonc
+  ```json
   {
     "jetls-client.executable": {
       "env": {
@@ -115,7 +115,7 @@ through the `jetls-client.executable` setting:
 - To use a JETLS binary you manage yourself, specify its `path`.
   This bypasses managed installation and updates:
 
-  ```jsonc
+  ```json
   {
     "jetls-client.executable": {
       "path": "/absolute/path/to/jetls"
@@ -126,7 +126,7 @@ through the `jetls-client.executable` setting:
 - To develop JETLS from a local checkout, provide the full launch command
   as an array. This also bypasses managed installation:
 
-  ```jsonc
+  ```json
   {
     "jetls-client.executable": [
       "julia",
@@ -177,7 +177,7 @@ For detailed initialization options and examples, see the
 
 ### Example initialization options
 
-```jsonc
+```json
 {
   "jetls-client.initializationOptions": {
     "analysis_overrides": [
@@ -202,7 +202,7 @@ For detailed configuration options and examples, see the
 
 > `.vscode/settings.json`
 
-```jsonc
+```json
 {
   "jetls-client.settings": {
     "full_analysis": {
