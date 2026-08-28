@@ -72,13 +72,13 @@ The generated blocks of [`package.json`](./package.json) (the
 `jetls-client.initializationOptions` schema) are not edited by hand:
 they are defined by the config structs in the JETLS server and synced
 from the `vscode-configuration.json` asset published on the pinned
-JETLS release with [`sync-schemas.mjs`](./sync-schemas.mjs):
+JETLS release with [`sync-schemas.mjs`](./scripts/sync-schemas.mjs):
 
 ```bash
 npm run sync-schemas
 ```
 
-`node sync-schemas.mjs --check` verifies `package.json` is in sync
+`node scripts/sync-schemas.mjs --check` verifies `package.json` is in sync
 (CI runs this), and `--from FILE` reads the asset from a local file
 (e.g. a JETLS checkout's `schemas/vscode-configuration.json`) instead
 of downloading it. Pin bumps performed by

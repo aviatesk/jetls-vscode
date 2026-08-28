@@ -14,7 +14,7 @@ export default tseslint.config(
 		ignores: [
 			'out/**',
 			"docs/**",
-			'esbuild.js',
+			'scripts/esbuild.js',
 		]
 	},
 	js.configs.recommended,

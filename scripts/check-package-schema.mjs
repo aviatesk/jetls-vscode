@@ -3,7 +3,7 @@ import { URL } from "node:url";
 import Ajv from "ajv";
 
 const packageJsonText = fs.readFileSync(
-  new URL("package.json", import.meta.url),
+  new URL("../package.json", import.meta.url),
   "utf8",
 );
 const packageJson = JSON.parse(packageJsonText);

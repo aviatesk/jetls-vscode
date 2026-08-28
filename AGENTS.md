@@ -115,7 +115,7 @@ npm test
 
 Tests use the Node.js built-in test runner (`node:test`), live in
 `test/*.test.ts`, and are built and run via
-[`test-runner.mjs`](./test-runner.mjs).
+[`test-runner.mjs`](./scripts/test-runner.mjs).
 
 # About modifications to code you've written
 

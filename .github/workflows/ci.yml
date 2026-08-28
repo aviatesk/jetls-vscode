@@ -38,7 +38,7 @@ jobs:
         with:
           node-version: "lts/*"
       - name: Check package.json schemas
-        run: node sync-schemas.mjs --check
+        run: node scripts/sync-schemas.mjs --check
 
   check_version_pin:
     name: Check JETLS_VERSION.json matches the pinned release

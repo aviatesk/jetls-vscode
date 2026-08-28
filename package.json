@@ -450,15 +450,15 @@
     }
   },
   "scripts": {
-    "build": "node esbuild.js --production",
-    "build:watch": "node esbuild.js --watch",
+    "build": "node scripts/esbuild.js --production",
+    "build:watch": "node scripts/esbuild.js --watch",
     "check": "npm run check:tsc && npm run check:lint && npm run check:package-schema",
     "check:tsc": "tsc --noEmit",
     "check:lint": "eslint",
-    "check:package-schema": "node check-package-schema.mjs",
-    "test": "node test-runner.mjs",
+    "check:package-schema": "node scripts/check-package-schema.mjs",
+    "test": "node scripts/test-runner.mjs",
     "clean": "rm -rf out *.vsix",
-    "sync-schemas": "node sync-schemas.mjs",
+    "sync-schemas": "node scripts/sync-schemas.mjs",
     "vscode:prepublish": "npm run check && npm test && npm run build"
   },
   "dependencies": {

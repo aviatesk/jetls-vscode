@@ -6,7 +6,7 @@
 // hand-written keys that only live in package.json (`scope`, `default`,
 // `order`).
 //
-// Usage: node sync-schemas.mjs [--check] [--from FILE]
+// Usage: node scripts/sync-schemas.mjs [--check] [--from FILE]
 //   --check      Verify package.json is up to date instead of writing
 //   --from FILE  Read the asset from FILE instead of downloading it
 
@@ -25,9 +25,9 @@ if (fromIndex !== -1 && !fromFile) {
   process.exit(1);
 }
 
-const packageJsonUrl = new URL("package.json", import.meta.url);
+const packageJsonUrl = new URL("../package.json", import.meta.url);
 const manifest = JSON.parse(
-  fs.readFileSync(new URL("JETLS_VERSION.json", import.meta.url), "utf8"),
+  fs.readFileSync(new URL("../JETLS_VERSION.json", import.meta.url), "utf8"),
 );
 
 async function loadFragment() {

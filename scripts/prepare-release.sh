@@ -161,7 +161,7 @@ scripts/check-julia-bounds.sh
 
 if [[ -n "$PIN" ]]; then
     echo "==> Step 3: Syncing package.json schemas from the pinned release"
-    node sync-schemas.mjs
+    node scripts/sync-schemas.mjs
 fi
 
 echo "==> Step 4: Setting extension version to $VERSION"
