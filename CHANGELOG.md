@@ -16,6 +16,10 @@ and this project uses [calendar versioning](https://calver.org/) (`YYYY.M.D`, th
 
 - Added a minimum-version check for custom `jetls` executables: an executable older than the `2026-08-28` release (required by the launch arguments this extension uses) now fails the startup preflight with an actionable error offering to open the setting, instead of an opaque startup timeout. (Closed https://github.com/aviatesk/jetls-vscode/issues/6)
 
+### Fixed
+
+- Fixed restarts failing permanently after a server startup timeout: the stuck client blocked every following restart, including the automatic one after fixing the offending setting, until VSCode itself was restarted. Such clients are now disposed and the restart proceeds with a fresh client. (Closed https://github.com/aviatesk/jetls-vscode/issues/7)
+
 ## v2026.8.29
 
 - Commit: [`v2026.8.29`](https://github.com/aviatesk/jetls-vscode/commit/v2026.8.29)

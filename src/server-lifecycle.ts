@@ -10,6 +10,7 @@ import {
 } from "vscode-languageclient/node";
 
 import { CoalescingTaskRunner } from "./coalescing-task-runner";
+import { stopClient } from "./client-shutdown";
 import {
   JETLS_CLIENT_SETTINGS_SECTION,
   MINIMUM_CUSTOM_JETLS_REVISION,
@@ -694,21 +695,17 @@ async function restartLanguageServer() {
   if (deactivating) {
     return;
   }
-  // A client that never reached the `Running` state (e.g. `StartFailed`)
-  // cannot be stopped: `stop()` would throw and permanently block restarts.
   if (languageClient?.needsStop()) {
     statusBar.show("restarting");
-    try {
-      await languageClient.stop(TIMEOUTS.serverStop);
-    } catch (err) {
-      statusBar.show("restart-failed");
-      const message = err instanceof Error ? err.message : String(err);
-      outputChannel.appendLine(
-        `[jetls-client] Failed to stop language client: ${message}.`,
-      );
-      throw err;
-    }
   }
+  // A client that never reached the `Running` state (e.g. one left stuck
+  // in `Starting` by a start timeout) cannot be stopped: `stop()` throws,
+  // which used to abort — and thereby permanently block — every restart.
+  // `stopClient` falls back to disposing such clients, so the restart
+  // always proceeds with a fresh client.
+  await stopClient(languageClient, TIMEOUTS.serverStop, (message) =>
+    outputChannel.appendLine(message),
+  );
   await startLanguageServer();
 }
 
@@ -842,14 +839,7 @@ export async function shutdownServerLifecycle(): Promise<void> {
     );
   }
   await awaitWithTimeout(restartRunner.active, TIMEOUTS.serverStop);
-  if (languageClient?.needsStop()) {
-    try {
-      await languageClient.stop(TIMEOUTS.serverStop);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      outputChannel?.appendLine(
-        `[jetls-client] Failed to stop language client: ${message}.`,
-      );
-    }
-  }
+  await stopClient(languageClient, TIMEOUTS.serverStop, (message) =>
+    outputChannel?.appendLine(message),
+  );
 }
