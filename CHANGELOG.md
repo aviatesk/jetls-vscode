@@ -7,8 +7,8 @@ and this project uses [calendar versioning](https://calver.org/) (`YYYY.M.D`, th
 
 ## Unreleased
 
-- Commit: [`HEAD`](https://github.com/aviatesk/JETLS.jl/commit/HEAD)
-- Diff: [`8a6998f1b...HEAD`](https://github.com/aviatesk/JETLS.jl/compare/8a6998f1b...HEAD)
+- Commit: [`HEAD`](https://github.com/aviatesk/jetls-vscode/commit/HEAD)
+- Diff: [`7f9e9e5c8...HEAD`](https://github.com/aviatesk/jetls-vscode/compare/7f9e9e5c8...HEAD)
 
 ### Added
 

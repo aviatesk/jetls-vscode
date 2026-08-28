@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: JETLS language server issues
+    url: https://github.com/aviatesk/JETLS.jl/issues/new/choose
+    about: Bugs and feature requests for language features (diagnostics, completions, hover, formatting, ...) belong to the JETLS.jl repository, even when observed in VSCode.

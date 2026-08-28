@@ -1,9 +1,9 @@
 {
-	"editor.insertSpaces": false,
-	"js/ts.tsc.autoDetect": "off",
-	"js/ts.preferences.quoteStyle": "single",
-	"[markdown]": {
-		"editor.rulers": [80],
-		"editor.tabSize": 2
-	}
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "js/ts.tsc.autoDetect": "off",
+  "js/ts.preferences.quoteStyle": "double",
+  "[markdown]": {
+    "editor.rulers": [80]
+  }
 }

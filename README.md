@@ -2,10 +2,10 @@
 
 [![](https://img.shields.io/badge/docs-user_guide-9558B2?logo=julia)](https://aviatesk.github.io/JETLS.jl/release/)
 [![](https://img.shields.io/badge/docs-dev_notes-7C3AED?logo=obsidian)](https://publish.obsidian.md/jetls)
-[![](https://github.com/aviatesk/JETLS.jl/actions/workflows/jetls-client.yml/badge.svg)](https://github.com/aviatesk/JETLS.jl/actions/workflows/jetls-client.yml)
+[![](https://github.com/aviatesk/jetls-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/aviatesk/jetls-vscode/actions/workflows/ci.yml)
 
 A [VSCode](https://code.visualstudio.com/) client extension for
-[JETLS](../README.md).
+[JETLS](https://github.com/aviatesk/JETLS.jl).
 
 JETLS is a new language server for [Julia](https://julialang.org/).
 JETLS aims to enhance developer productivity by providing advanced static

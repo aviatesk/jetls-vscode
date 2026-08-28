@@ -6,8 +6,8 @@
       "request": "launch",
       "name": "Launch Client",
       "runtimeExecutable": "${execPath}",
-      "args": ["--extensionDevelopmentPath=${workspaceRoot}"],
-      "outFiles": ["${workspaceRoot}/out/**/*.js"],
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "sourceMaps": true,
       "autoAttachChildProcesses": true,
       "preLaunchTask": "npm: build:watch"
