@@ -15,7 +15,9 @@ like [JET.jl](https://github.com/aviatesk/JET.jl),
 JETLS aims to offer enhanced language features such as type-sensitive
 diagnostic, macro-aware go-to definition and such.
 
-> [!note] JETLS.jl is not integrated with the
+> [!note]
+>
+> JETLS.jl is not integrated with the
 > [`julia-vscode` extension](https://www.julia-vscode.org/) yet. To use JETLS
 > from VSCode, install this `jetls-client` extension. While we generally
 > recommend disabling `julia-vscode` when using `jetls-client`, this is not
