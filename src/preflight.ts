@@ -6,6 +6,31 @@ import { SpawnProcess, terminateProcess } from "./process-termination";
 export type ExecutableConfig =
   { path?: string; threads?: string; env?: Record<string, string> } | string[];
 
+export class UnsupportedJETLSVersionError extends Error {
+  constructor(
+    readonly version: string,
+    readonly minimum: string,
+  ) {
+    super(
+      `The configured JETLS executable reports version ${version}, but ` +
+        `this extension requires at least the ${minimum} release. Update ` +
+        "the executable, or remove the `path`/command from " +
+        "`jetls-client.executable` to use the managed installation.",
+    );
+  }
+}
+
+/**
+ * Extracts the JETLS revision from `jetls version` output
+ * (`jetls version <revision>, julia version <...>`). Only date-based release
+ * revisions (`YYYY-MM-DD`, lexicographically ordered) are recognized;
+ * anything else returns `undefined` and is exempt from the revision gate.
+ */
+export function parseJETLSRevision(output: string): string | undefined {
+  const match = /^jetls version (\d{4}-\d{2}-\d{2})\b/m.exec(output);
+  return match?.[1];
+}
+
 export interface JETLSCommands {
   command: string;
   versionArgs: string[];
@@ -86,6 +111,8 @@ export interface VersionPreflightOptions {
   timeoutMs: number;
   terminationTimeoutMs: number;
   platform: NodeJS.Platform;
+  /** Reject executables reporting a release older than this (`YYYY-MM-DD`). */
+  minimumRevision?: string;
   spawnProcess?: SpawnProcess;
   killProcessGroup?: (pid: number, signal: NodeJS.Signals) => void;
   isProcessGroupAlive?: (pid: number) => boolean;
@@ -144,6 +171,18 @@ export class VersionPreflight {
     return preflight === undefined
       ? Promise.resolve()
       : this.terminateProcess(preflight);
+  }
+
+  private checkRevision(output: string): Error | undefined {
+    const minimum = this.options.minimumRevision;
+    if (minimum === undefined) {
+      return undefined;
+    }
+    const revision = parseJETLSRevision(output);
+    if (revision !== undefined && revision < minimum) {
+      return new UnsupportedJETLSVersionError(revision, minimum);
+    }
+    return undefined;
   }
 
   async run(
@@ -232,7 +271,7 @@ export class VersionPreflight {
         if (processError !== undefined) {
           finish(processError);
         } else if (code === 0) {
-          finish();
+          finish(this.checkRevision(output));
         } else if (signal !== null) {
           finish(
             new Error(`JETLS version check exited with signal ${signal}.`),

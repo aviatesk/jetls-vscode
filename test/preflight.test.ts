@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import {
   createStderrWatcher,
+  parseJETLSRevision,
   resolveJETLSCommands,
+  UnsupportedJETLSVersionError,
   VersionPreflight,
   VersionPreflightOptions,
 } from "../src/preflight";
@@ -144,6 +146,57 @@ test("runs a successful version preflight", async () => {
       "[jetls-client] JETLS version check stdout:\nJETLS version 1.0",
     ),
   );
+});
+
+test("parses release revisions from version output", () => {
+  assert.equal(
+    parseJETLSRevision("jetls version 2026-08-23, julia version 1.12.7"),
+    "2026-08-23",
+  );
+  assert.equal(
+    // Development checkouts report the monorepo's literal `dev` version.
+    parseJETLSRevision("jetls version dev, julia version 1.13.0"),
+    undefined,
+  );
+  assert.equal(parseJETLSRevision("jetls version 1.0"), undefined);
+  assert.equal(parseJETLSRevision("unexpected output"), undefined);
+});
+
+test("rejects executables older than the minimum revision", async () => {
+  const child = new FakeChildProcess();
+  const { preflight } = createPreflight([child], {
+    minimumRevision: "2026-08-28",
+  });
+
+  const run = preflight.run("jetls", ["--", "version"], {});
+  child.stdout.write("jetls version 2026-08-23, julia version 1.12.7\n");
+  child.close(0, null);
+
+  await assert.rejects(run, (error) => {
+    assert.ok(error instanceof UnsupportedJETLSVersionError);
+    assert.equal(error.version, "2026-08-23");
+    assert.equal(error.minimum, "2026-08-28");
+    assert.match(error.message, /managed installation/);
+    return true;
+  });
+});
+
+test("passes matching and undated versions through the revision gate", async () => {
+  for (const output of [
+    "jetls version 2026-08-28, julia version 1.12.7",
+    "jetls version 2026-09-05, julia version 1.13.0",
+    "jetls version dev, julia version 1.13.0",
+    "jetls version 1.0",
+  ]) {
+    const child = new FakeChildProcess();
+    const { preflight } = createPreflight([child], {
+      minimumRevision: "2026-08-28",
+    });
+    const run = preflight.run("jetls", ["--", "version"], {});
+    child.stdout.write(`${output}\n`);
+    child.close(0, null);
+    await run;
+  }
 });
 
 test("preserves spawn errors", async () => {

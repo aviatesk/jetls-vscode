@@ -9,6 +9,14 @@ export const JETLS_CLIENT_SETTINGS_SECTION = "jetls-client.settings";
 export const PRECOMPILING_MARKER = "Precompiling packages";
 
 /**
+ * Oldest JETLS release whose CLI understands the launch arguments this
+ * extension uses (`--pipe=<path>` is accepted since the 2026-08-28 release).
+ * Custom executables reporting an older release fail the version preflight
+ * with an actionable error instead of an opaque startup timeout.
+ */
+export const MINIMUM_CUSTOM_JETLS_REVISION = "2026-08-28";
+
+/**
  * Cap on accumulated version preflight stdout, which is only ever surfaced
  * as a single log line.
  */
