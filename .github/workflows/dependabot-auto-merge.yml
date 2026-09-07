@@ -1,0 +1,43 @@
+name: dependabot auto-merge
+
+on:
+  # Dependabot's pull_request workflows get a read-only token. Keep this
+  # privileged workflow API-only: never check out or execute PR code.
+  pull_request_target:
+    branches:
+      - master
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  auto_merge:
+    name: Enable Dependabot auto-merge
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Read dependency update metadata
+        uses: dependabot/fetch-metadata@v3
+        id: metadata
+      - name: Enable auto-merge after required checks pass
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          gh pr merge "$PR_NUMBER" --auto --squash
+          --match-head-commit "$HEAD_SHA"
