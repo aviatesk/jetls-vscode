@@ -84,6 +84,14 @@ checkout's `schemas/vscode-configuration.json`) instead of downloading it. Pin
 bumps performed by [`scripts/prepare-release.sh`](./scripts/prepare-release.sh)
 `--pin` re-run the sync automatically.
 
+## Changelog
+
+Write extension-specific changes under `### VS Code extension` in the
+`Unreleased` section of [`CHANGELOG.md`](./CHANGELOG.md), using `#### Added`,
+`#### Changed`, `#### Fixed`, or similar headings. During
+[release preparation](#publishing), the pin and language-server placeholders are
+filled in automatically. Review the generated notes in the release PR.
+
 ## Publishing
 
 The managed default installs the JETLS release tag pinned in
@@ -115,8 +123,9 @@ To release the extension:
    exists, sets the version in [`package.json`](./package.json) and
    [`package-lock.json`](./package-lock.json), renames the
    [`CHANGELOG.md`](./CHANGELOG.md) `Unreleased` section to the release version
-   (recording the pinned JETLS release in it and re-creating an empty
-   `Unreleased` section), updates the version placeholder in the
+   (recording the pin, generating the server links described
+   [above](#changelog), and re-creating the `Unreleased` template), updates the
+   version placeholder in the
    [bug-report issue template](./.github/ISSUE_TEMPLATE/bug-report.yml), creates
    the `vYYYY.M.D` release commit, and opens a pull request against `master`.
    Use `--no-push` to prepare the branch locally without pushing or opening the

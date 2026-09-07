@@ -26,13 +26,17 @@ line.
 
 ## Section structure
 
-New entries go under the `## Unreleased` section. Use the following subsections
-as needed (in this order):
+New extension-specific entries go under `### VS Code extension` in the
+`## Unreleased` section. Use the following subsections as needed (in this
+order):
 
-- `### Announcement` -- important notices (always first if present)
-- `### Added` -- new features
-- `### Changed` -- changes to existing functionality
-- `### Fixed` -- bug fixes
+- `#### Announcement` -- important notices (always first if present)
+- `#### Added` -- new features
+- `#### Changed` -- changes to existing functionality
+- `#### Fixed` -- bug fixes
+
+Keep the pin and `### Language server` placeholders in `Unreleased`; they are
+filled in during release preparation. Do not add server release links by hand.
 
 ## Release metadata lines
 

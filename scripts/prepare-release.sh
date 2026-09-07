@@ -169,46 +169,7 @@ npm version "$VERSION" --no-git-tag-version >/dev/null
 
 echo "==> Step 5: Finalizing the CHANGELOG"
 CHANGELOG=CHANGELOG.md
-if ! grep -Fxq "## Unreleased" "$CHANGELOG"; then
-    echo "Error: no '## Unreleased' section in $CHANGELOG."
-    exit 1
-fi
-# The Pinned line makes the paired server release explicit, since the
-# extension version only records the client release date.
-PINNED_LINE="- Pinned JETLS: [\`$REVISION\`](https://github.com/aviatesk/JETLS.jl/releases/tag/$REVISION)"
-sed -i.bak -E \
-    -e "s|^## Unreleased$|## v$VERSION|" \
-    -e "/^- (Commit|Diff): /s|HEAD|$TAG|g" \
-    -e "s|^(- Diff: .*$TAG\))$|\1\\
-$PINNED_LINE|" \
-    "$CHANGELOG"
-rm "$CHANGELOG.bak"
-# Re-create an empty Unreleased section above the released one, so future
-# entries have a place to land and pin-only automated releases (which add
-# no entries of their own) keep working.
-awk -v ver="## v$VERSION" -v tag="$TAG" '
-    $0 == ver && !done {
-        print "## Unreleased"
-        print ""
-        print "- Commit: [`HEAD`](https://github.com/aviatesk/jetls-vscode/commit/HEAD)"
-        print "- Diff: [`" tag "...HEAD`](https://github.com/aviatesk/jetls-vscode/compare/" tag "...HEAD)"
-        print ""
-        done = 1
-    }
-    { print }
-' "$CHANGELOG" > "$CHANGELOG.tmp" && mv "$CHANGELOG.tmp" "$CHANGELOG"
-released_section() {
-    awk -v ver="## v$VERSION" '
-        /^## / { if (found) exit; if ($0 == ver) { found = 1; next } }
-        found' "$CHANGELOG"
-}
-if ! grep -Fxq "## Unreleased" "$CHANGELOG" ||
-    ! grep -Fxq "## v$VERSION" "$CHANGELOG" ||
-    ! released_section | grep -Fq -- "$PINNED_LINE" ||
-    released_section | grep -q "HEAD"; then
-    echo "Error: failed to finalize the Unreleased section in $CHANGELOG."
-    exit 1
-fi
+node scripts/update-changelog.mjs
 
 echo "==> Step 6: Updating the issue template version placeholder"
 BUG_REPORT=.github/ISSUE_TEMPLATE/bug-report.yml

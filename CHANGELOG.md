@@ -1,14 +1,29 @@
 # CHANGELOG
 
-All notable changes to this project will be documented in this file.
-
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [calendar versioning](https://calver.org/) (`YYYY.M.D`, the release date); releases up to v0.8.0 used [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+This file describes changes delivered by extension updates, including updates to the managed JETLS language server. Language-server sections link to the upstream release notes.
 
 ## Unreleased
 
 - Commit: [`HEAD`](https://github.com/aviatesk/jetls-vscode/commit/HEAD)
 - Diff: [`v2026.9.1...HEAD`](https://github.com/aviatesk/jetls-vscode/compare/v2026.9.1...HEAD)
+- Pinned JETLS: <!-- Set during release preparation; do not edit by hand. -->
+
+### Language server
+
+<!-- Generated during release preparation; do not edit by hand. -->
+
+### VS Code extension
+
+#### Changed
+
+- Release notes now separate language-server updates from VS Code extension changes, with links to every server release since the previous extension's pin and the cumulative server diff.
+
+#### Fixed
+
+- Fixed the CHANGELOG being excluded from the published extension, so release notes are now available in VS Code and the Marketplace.
 
 ## v2026.9.1
 
