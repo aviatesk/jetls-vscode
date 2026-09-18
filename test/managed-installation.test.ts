@@ -20,6 +20,7 @@ import { TIMEOUTS } from "../src/constants";
 import {
   JETLS_REPOSITORY,
   JETLS_REVISION,
+  MANAGED_STORAGE_SETTING,
   ManagedInstallationCancelledError,
   ManagedJETLSError,
   createDefaultProcessRunner,
@@ -37,6 +38,7 @@ import {
   needsWindowsBatchShell,
   readCurrentGeneration,
   resolveExecutable,
+  resolveManagedStoragePath,
   runtimeKey,
   serverLaunchEnvironment,
   touchManagedInstallation,
@@ -1176,6 +1178,87 @@ test("classifies first-install failures as retryable install errors", async () =
 
     // The failed process has exited, so the install lock is released.
     await assert.rejects(stat(path.join(expectedDepot, "install.lock")));
+  });
+});
+
+test("directs Windows path-length failures to the storage setting instead of retrying", async () => {
+  await withFixture(async (fixture) => {
+    const logs: string[] = [];
+    const stderr =
+      "ERROR: GitError(Code:ERROR, Class:Filesystem, path too long: 'C:/long/ref/HEAD')\n";
+    const fake = fakeRunner(async (call) => {
+      if (scriptFor(call)?.includes("Pkg.Apps.add")) {
+        return failure(1, "", stderr);
+      }
+      return success("1.12.2\n");
+    });
+    for (const platform of ["win32", "linux"] as const) {
+      await assert.rejects(
+        ensureManagedJETLS({
+          storagePath: fixture.storagePath,
+          environment: fixture.environment,
+          juliaCommand: fixture.juliaPath,
+          platform,
+          processRunner: fake.runner,
+          logger: (message) => logs.push(message),
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof ManagedJETLSError);
+          if (platform === "win32") {
+            assert.equal(error.retryable, false);
+            assert.equal(error.setting, MANAGED_STORAGE_SETTING);
+            assert.match(error.summary, /Windows storage path is too long/);
+            assert.match(error.message, /shorter absolute path/);
+            assert.match(error.message, /Managed storage:/);
+            assert.doesNotMatch(error.message, /Reinstall Server/);
+          } else {
+            assert.equal(error.retryable, true);
+            assert.equal(error.setting, "jetls-client.executable");
+          }
+          return true;
+        },
+      );
+    }
+    assert.ok(logs.some((message) => message.includes(stderr)));
+  });
+});
+
+test("changing the storage root installs afresh without moving or cleaning other storage", async () => {
+  await withFixture(async (fixture) => {
+    const legacy = await seedGeneration(fixture.storagePath, fixture.juliaPath);
+    const parentRoot = path.join(fixture.root, "managed");
+    const storagePath = resolveManagedStoragePath(
+      fixture.storagePath,
+      parentRoot,
+    );
+    const otherStorage = resolveManagedStoragePath(
+      path.join(fixture.root, "other-vscode-storage"),
+      parentRoot,
+    );
+    const other = await seedGeneration(otherStorage, fixture.juliaPath);
+    for (const generation of [legacy, other]) {
+      await setAgeMs(path.dirname(generation), 60 * 24 * 60 * 60 * 1000);
+    }
+    const fake = standardRunner(fixture.juliaPath);
+    const installation = await ensureManagedJETLS({
+      storagePath,
+      environment: fixture.environment,
+      processRunner: fake.runner,
+    });
+    await managedCleanupSettled();
+
+    assert.equal(callsWithScript(fake.calls, "Pkg.Apps.add").length, 1);
+    assert.equal(
+      path.dirname(installation.depotPath),
+      managedDepotPath(storagePath, fixture.juliaPath, "1.12.2"),
+    );
+    for (const generation of [legacy, other]) {
+      assert.equal(
+        await readCurrentGeneration(path.dirname(generation)),
+        generation,
+      );
+      assert.equal((await stat(installStampPath(generation))).isFile(), true);
+    }
   });
 });
 

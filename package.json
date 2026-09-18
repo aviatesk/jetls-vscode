@@ -105,6 +105,13 @@
           "markdownDescription": "JETLS executable configuration. Most users should omit `path` and use the managed installation.\n\nUse object form `{threads, env}` for managed JETLS. Set `env.JULIAUP_CHANNEL` to select a [juliaup](https://github.com/JuliaLang/juliaup) channel, or `env.JULIA_APPS_JULIA_CMD` to select a Julia executable directly. Add `path` to use a custom executable and bypass managed installation.\n\nUse array form `[\"julia\", \"--startup-file=no\", \"--history-file=no\", \"--project=/path/to/JETLS\", \"-m\", \"JETLS\", \"serve\"]` to run a full custom command.",
           "order": 1
         },
+        "jetls-client.managedStoragePath": {
+          "scope": "machine",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional parent directory for managed JETLS storage. Leave empty to use the extension's VS Code global storage directory on all platforms, including portable installations. If installation fails with a Windows path-length error, choose a short, writable absolute path such as `C:/jetls`.\n\nUse a literal path on the extension host; environment variables and `~` are not expanded. Paths must not contain Julia's path-list separator (`;` on Windows, `:` elsewhere). The extension adds a short storage-specific subdirectory to keep separate VS Code installations isolated.\n\nA new location requires a fresh installation; existing depots are not moved or deleted. Ignored when using a custom executable.",
+          "order": 2
+        },
         "jetls-client.communicationChannel": {
           "scope": "resource",
           "type": "string",
@@ -116,14 +123,14 @@
           ],
           "default": "auto",
           "markdownDescription": "Communication channel for the language server:\n- `'auto'` (default) selects the best option based on environment\n- `'pipe'` for local development with stdout isolation\n- `'socket'` for network communication\n- `'stdio'` for maximum compatibility (but risk of stdout pollution).\n\nSee [Communication channels](https://aviatesk.github.io/JETLS.jl/release/launching/#Communication-channels) documentation for more details.",
-          "order": 2
+          "order": 3
         },
         "jetls-client.socketPort": {
           "scope": "resource",
           "type": "number",
           "default": 0,
           "markdownDescription": "Port number for socket communication (`0` = auto-assign). Only used when `'socket'` communication channel is used.",
-          "order": 3
+          "order": 4
         },
         "jetls-client.initializationOptions": {
           "scope": "resource",
@@ -169,7 +176,7 @@
               "type": "boolean"
             }
           },
-          "order": 4,
+          "order": 5,
           "additionalProperties": false,
           "required": []
         },
