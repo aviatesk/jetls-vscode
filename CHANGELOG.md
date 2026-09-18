@@ -17,6 +17,14 @@ This file describes changes delivered by extension updates, including updates to
 
 ### VS Code extension
 
+#### Added
+
+- Added `jetls-client.managedStoragePath` to override the managed server's storage location when needed.
+
+#### Fixed
+
+- Fixed misleading retry guidance for Windows path-length failures during managed installation: the error now offers to open the storage setting so a shorter path can be selected. (Closed https://github.com/aviatesk/jetls-vscode/issues/20)
+
 ## v2026.9.6
 
 - Commit: [`v2026.9.6`](https://github.com/aviatesk/jetls-vscode/commit/v2026.9.6)

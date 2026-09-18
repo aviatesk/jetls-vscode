@@ -51,7 +51,8 @@ extension update requires a newer version.
 The extension stores JETLS separately from packages in your regular Julia depot.
 Different Julia installations and Julia minor versions use separate managed
 copies, and copies for a Julia you stopped using are removed automatically after
-a while. You do not need to configure or maintain this storage.
+a while. You do not need to configure or maintain this storage. See
+[Managed server storage](#managed-server-storage) for locations and overrides.
 
 The first installation and each managed update require network access. Once
 installed, the cached server can start while offline. The status bar shows
@@ -68,6 +69,17 @@ To recover from a broken managed installation, run
 `JETLS Client: Reinstall Server` from the Command Palette. The command asks for
 confirmation and installs a fresh copy, which requires network access;
 superseded copies are cleaned up automatically.
+
+### Managed server storage
+
+Storage is managed automatically. If you encounter Windows path-length errors or
+need a different location, set `jetls-client.managedStoragePath` to a short,
+writable absolute path on the machine running the extension, such as `C:/jetls`.
+Leave it empty to keep using VSCode's extension storage.
+
+Selecting a new location requires a fresh installation and network access;
+existing depots are not moved or deleted. This setting is ignored when using a
+custom executable.
 
 ## Launching configuration (advanced)
 

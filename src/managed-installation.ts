@@ -30,6 +30,7 @@ export const JETLS_REPOSITORY = "https://github.com/aviatesk/JETLS.jl";
 // `JETLS_VERSION.json` so the server release process can update them as
 // structured data; the values are inlined into the bundle at build time.
 export const JETLS_REVISION: string = JETLS_VERSION.revision;
+export const MANAGED_STORAGE_SETTING = "jetls-client.managedStoragePath";
 const MANAGED_DEPOTS_DIR = "jetls-depots";
 const CURRENT_POINTER_FILE = "current";
 const INSTALL_LOCK_DIR = "install.lock";
@@ -155,6 +156,8 @@ export interface JuliaVersion {
 
 /** The processing stage a managed-installation failure originated from. */
 type ManagedStage = "julia-resolution" | "julia-version" | "install" | "verify";
+type ManagedSetting =
+  "jetls-client.executable" | typeof MANAGED_STORAGE_SETTING;
 
 interface RuntimeContext {
   containerPath: string;
@@ -172,6 +175,7 @@ class ManagedStepError extends Error {
   readonly processMayBeAlive: boolean;
   /** Overrides the stage-derived retryability default when set. */
   readonly retryable?: boolean;
+  readonly setting?: ManagedSetting;
 
   constructor(
     message: string,
@@ -179,6 +183,7 @@ class ManagedStepError extends Error {
     options: {
       processMayBeAlive?: boolean;
       retryable?: boolean;
+      setting?: ManagedSetting;
       cause?: unknown;
     } = {},
   ) {
@@ -187,6 +192,7 @@ class ManagedStepError extends Error {
     this.stage = stage;
     this.processMayBeAlive = options.processMayBeAlive === true;
     this.retryable = options.retryable;
+    this.setting = options.setting;
   }
 }
 
@@ -218,18 +224,21 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
 export class ManagedJETLSError extends Error {
   readonly summary: string;
   readonly retryable: boolean;
+  readonly setting: ManagedSetting;
 
   constructor(
     message: string,
     details: {
       summary: string;
       retryable: boolean;
+      setting?: ManagedSetting;
     },
   ) {
     super(message);
     this.name = "ManagedJETLSError";
     this.summary = details.summary;
     this.retryable = details.retryable;
+    this.setting = details.setting ?? "jetls-client.executable";
   }
 }
 
@@ -465,6 +474,54 @@ export function managedDepotPath(
     MANAGED_DEPOTS_DIR,
     runtimeKey(juliaPath, juliaVersion),
   );
+}
+
+function isAbsoluteStoragePath(
+  value: string,
+  platform: NodeJS.Platform,
+): boolean {
+  return platform === "win32"
+    ? /^(?:[a-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+)/i.test(value)
+    : path.posix.isAbsolute(value);
+}
+
+export function resolveManagedStoragePath(
+  globalStoragePath: string,
+  configuredPath: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const storageRoot = configuredPath.trim();
+  if (storageRoot === "") {
+    return globalStoragePath;
+  }
+  if (!isAbsoluteStoragePath(storageRoot, platform)) {
+    const summary = `${MANAGED_STORAGE_SETTING} must be an absolute path.`;
+    throw new ManagedJETLSError(
+      `${summary} Use a literal path on the machine running the extension; ` +
+        "environment variables and ~ are not expanded. Leave it empty to use the default.",
+      { summary, retryable: false, setting: MANAGED_STORAGE_SETTING },
+    );
+  }
+  const delimiter = platformDelimiter(platform);
+  if (storageRoot.includes(delimiter)) {
+    const summary = `Managed JETLS storage must not contain '${delimiter}'.`;
+    throw new ManagedJETLSError(
+      `${summary} Julia treats it as a path-list separator. ` +
+        `Choose a different path in \`${MANAGED_STORAGE_SETTING}\`.`,
+      { summary, retryable: false, setting: MANAGED_STORAGE_SETTING },
+    );
+  }
+  const paths = platform === "win32" ? path.win32 : path.posix;
+  const storageIdentity = paths.resolve(globalStoragePath);
+  // Cleanup must not cross into another VS Code installation's storage,
+  // including when two portable installations choose the same override.
+  const storageId = createHash("sha256")
+    .update(
+      platform === "win32" ? storageIdentity.toLowerCase() : storageIdentity,
+    )
+    .digest("hex")
+    .slice(0, 12);
+  return paths.join(storageRoot, storageId);
 }
 
 export function currentPointerPath(containerPath: string): string {
@@ -983,6 +1040,21 @@ async function runCheckedProcess(
     throw new ManagedInstallationCancelledError();
   }
   if (result.status !== 0 || result.error !== undefined) {
+    if (
+      platform === "win32" &&
+      stage === "install" &&
+      /\bpath too long\b/i.test(result.stderr)
+    ) {
+      throw new ManagedStepError(
+        "Managed JETLS installation failed: the Windows storage path is too long.",
+        stage,
+        {
+          processMayBeAlive: result.processMayBeAlive === true,
+          retryable: false,
+          setting: MANAGED_STORAGE_SETTING,
+        },
+      );
+    }
     const status =
       result.status === null ? "unavailable" : String(result.status);
     const suffix = result.error === undefined ? "" : `: ${result.error}`;
@@ -1514,17 +1586,21 @@ function managedError(
         "it cannot affect a new installation attempt, though ending it " +
         "(or rebooting) frees its resources.\n"
       : "";
-  const recovery = retryable
-    ? "Recovery: " +
-      (mayRequireNetwork ? "this step may need network access; " : "") +
-      "retry by restarting the language server. If the managed " +
-      "installation itself is broken, run the 'JETLS Client: Reinstall " +
-      "Server' command, or configure a self-managed server via the " +
-      "`jetls-client.executable` setting."
-    : "Recovery: adjust the `jetls-client.executable` setting (its " +
-      "`env`, or the `julia` installation it resolves) so a supported " +
-      "Julia is found, or point its `path` at a self-managed JETLS " +
-      "executable.";
+  const recovery =
+    step?.setting === MANAGED_STORAGE_SETTING
+      ? `Recovery: set \`${MANAGED_STORAGE_SETTING}\` to a shorter absolute ` +
+        "path. Windows long-path settings do not bypass libgit2's reference-path limit."
+      : retryable
+        ? "Recovery: " +
+          (mayRequireNetwork ? "this step may need network access; " : "") +
+          "retry by restarting the language server. If the managed " +
+          "installation itself is broken, run the 'JETLS Client: Reinstall " +
+          "Server' command, or configure a self-managed server via the " +
+          "`jetls-client.executable` setting."
+        : "Recovery: adjust the `jetls-client.executable` setting (its " +
+          "`env`, or the `julia` installation it resolves) so a supported " +
+          "Julia is found, or point its `path` at a self-managed JETLS " +
+          "executable.";
   return new ManagedJETLSError(
     `${errorMessage(error)}\n` +
       `Julia command: ${juliaCommand}\n` +
@@ -1533,7 +1609,7 @@ function managedError(
         : `Managed storage: ${containerPath}\n`) +
       survivorNote +
       recovery,
-    { summary, retryable },
+    { summary, retryable, setting: step?.setting },
   );
 }
 

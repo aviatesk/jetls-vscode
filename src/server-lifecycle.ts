@@ -23,6 +23,7 @@ import {
   ManagedInstallationCancelledError,
   ManagedJETLSError,
   managedJETLSCommands,
+  resolveManagedStoragePath,
   touchManagedInstallation,
 } from "./managed-installation";
 import {
@@ -46,7 +47,7 @@ let statusBar: StartupStatusBar;
 let deactivating = false;
 let currentServerConfig: ServerConfig | null = null;
 let cancelServerStartup: (() => void) | undefined;
-let managedStoragePath: string;
+let globalStoragePath: string;
 
 export function activateServerLifecycle(
   channel: LogOutputChannel,
@@ -55,7 +56,7 @@ export function activateServerLifecycle(
 ): void {
   outputChannel = channel;
   statusBar = bar;
-  managedStoragePath = context.globalStorageUri.fsPath;
+  globalStoragePath = context.globalStorageUri.fsPath;
   deactivating = false;
 }
 
@@ -115,7 +116,7 @@ function showManagedFailureNotification(err: Error): void {
       } else if (selection === settingsButton) {
         void vscode.commands.executeCommand(
           "workbench.action.openSettings",
-          "jetls-client.executable",
+          details?.setting ?? "jetls-client.executable",
         );
       }
     });
@@ -224,7 +225,9 @@ async function startLanguageServer() {
   stopManagedLastUsedRefresh();
   statusBar.show("checking");
 
-  const serverConfig = getServerConfig();
+  const serverConfig = getServerConfig(
+    vscode.workspace.getConfiguration("jetls-client"),
+  );
   currentServerConfig = serverConfig;
   const managed = isManagedExecutable(serverConfig.executable);
 
@@ -243,7 +246,10 @@ async function startLanguageServer() {
     let installPhase: string | undefined;
     try {
       installation = await ensureManagedJETLS({
-        storagePath: managedStoragePath,
+        storagePath: resolveManagedStoragePath(
+          globalStoragePath,
+          serverConfig.managedStoragePath,
+        ),
         environment: executableEnvironment(executable),
         logger: (message) =>
           outputChannel.appendLine(`[jetls-client] ${message}`),
@@ -770,7 +776,9 @@ export async function reinstallServer(): Promise<void> {
   if (deactivating) {
     return;
   }
-  const serverConfig = getServerConfig();
+  const serverConfig = getServerConfig(
+    vscode.workspace.getConfiguration("jetls-client"),
+  );
   if (!isManagedExecutable(serverConfig.executable)) {
     void vscode.window.showInformationMessage(
       "JETLS managed installation is disabled by the executable setting.",
@@ -797,7 +805,9 @@ export async function reinstallServer(): Promise<void> {
 }
 
 export function restartOnServerConfigChange(): void {
-  const newConfig = getServerConfig();
+  const newConfig = getServerConfig(
+    vscode.workspace.getConfiguration("jetls-client"),
+  );
   if (hasServerConfigChanged(currentServerConfig, newConfig)) {
     vscode.window.showInformationMessage(
       "JETLS configuration changed. Restarting language server...",
