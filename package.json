@@ -485,7 +485,7 @@
     "@types/vscode": "^1.136.0",
     "@types/which": "^3.0.4",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "@vscode/vsce": "^3.9.2",
+    "@vscode/vsce": "^4.0.0",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.0",
     "eslint": "^10.10.0",
