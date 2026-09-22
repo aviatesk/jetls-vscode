@@ -512,6 +512,10 @@ async function startLanguageServer() {
     // `configuration_section` initialization option, which the managed
     // installation guarantees.
     configuration_section: JETLS_CLIENT_SETTINGS_SECTION,
+    // Pull the live diagnostics of open files: the client clears them as soon
+    // as a tab closes, which the server cannot tell from `textDocument/didClose`.
+    // This also requires a server that understands the option.
+    pull_diagnostics: true,
   };
 
   const clientOptions: LanguageClientOptions = {
