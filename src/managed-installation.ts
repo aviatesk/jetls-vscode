@@ -64,6 +64,14 @@ const UNPUBLISHED_GENERATION_GRACE = 24 * 60 * 60 * 1000;
 // in another window; it is removed only after it has gone unused long
 // enough that no live window plausibly resolved it.
 const GENERATION_RETENTION = 7 * 24 * 60 * 60 * 1000;
+// Cleanup judges and removes generations without coordinating with
+// starts, which is safe as long as no start resolves a generation after
+// it left `current`. Adopting a superseded generation again breaks that,
+// so adoption stays a margin short of the retention: a cleanup that
+// already judged a generation removable can then only race an adoption
+// that stalled for the whole margin between reading the marker and
+// refreshing it.
+const GENERATION_ADOPTION_AGE = GENERATION_RETENTION - 24 * 60 * 60 * 1000;
 // A whole runtime container goes stale when the user switches Julia
 // (another executable, or another minor version): no start resolves it
 // anymore, so nothing inside it can be in use. The retention is long
@@ -1401,6 +1409,39 @@ async function stampedCurrentGeneration(
   return undefined;
 }
 
+// Returns the most recently used generation stamped for the exact (pin,
+// Julia version) pair, so that switching back to a pin (an extension
+// downgrade, or windows running different extension versions) does not
+// install it again. The last-used marker is required: a directory's own
+// mtime keeps changing while cleanup removes it.
+async function adoptableGeneration(
+  context: RuntimeContext,
+): Promise<string | undefined> {
+  let adoptable: { generationPath: string; lastUsedMs: number } | undefined;
+  const entries = await readdir(context.containerPath).catch(
+    (): string[] => [],
+  );
+  for (const entry of entries) {
+    const generationPath = path.join(context.containerPath, entry);
+    if (!(await matchesInstallStamp(generationPath, context.juliaVersion))) {
+      continue;
+    }
+    let lastUsedMs: number;
+    try {
+      lastUsedMs = (await stat(lastUsedPath(generationPath))).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (
+      Date.now() - lastUsedMs <= GENERATION_ADOPTION_AGE &&
+      (adoptable === undefined || lastUsedMs > adoptable.lastUsedMs)
+    ) {
+      adoptable = { generationPath, lastUsedMs };
+    }
+  }
+  return adoptable?.generationPath;
+}
+
 async function installGeneration(
   context: RuntimeContext,
   baseEnvironment: NodeJS.ProcessEnv,
@@ -1465,13 +1506,13 @@ async function installGeneration(
 
 // Resolves the generation to launch: the stamped current generation when
 // it matches, a re-verified current generation after a Julia patch
-// update or a dropped stamp, and a freshly installed generation
-// otherwise (including after a pin change). A failed or crashed
-// installation leaves the previous current generation untouched — even a
-// process that outlives its host only ever writes to the unpublished
-// generation it was producing, which cleanup eventually removes — so
-// nothing needs backups or restore transactions, and a retry can start
-// immediately.
+// update or a dropped stamp, a still-retained generation of the pin
+// after a pin change back to it, and a freshly installed generation
+// otherwise. A failed or crashed installation leaves the previous
+// current generation untouched — even a process that outlives its host
+// only ever writes to the unpublished generation it was producing, which
+// cleanup eventually removes — so nothing needs backups or restore
+// transactions, and a retry can start immediately.
 async function resolveGeneration(
   context: RuntimeContext,
   baseEnvironment: NodeJS.ProcessEnv,
@@ -1523,10 +1564,23 @@ async function resolveGeneration(
           return await settle(stamped);
         }
         const current = await readCurrentGeneration(context.containerPath);
-        if (
+        if (current !== undefined && (await isStampedForAnotherPin(current))) {
+          // A sibling stamped for the current generation's own pin was
+          // superseded, possibly by an explicit reinstall, so only a pin
+          // change looks for a generation to adopt.
+          const adoptable = await adoptableGeneration(context);
+          if (adoptable !== undefined) {
+            await touchLastUsed(adoptable);
+            await writeCurrentGeneration(
+              context.containerPath,
+              path.basename(adoptable),
+            );
+            emit(logger, `Reusing managed JETLS installation: ${adoptable}`);
+            return await settle(adoptable);
+          }
+        } else if (
           current !== undefined &&
-          (await isFile(managedManifest(current))) &&
-          !(await isStampedForAnotherPin(current))
+          (await isFile(managedManifest(current)))
         ) {
           emit(progress, "Verifying JETLS...");
           try {

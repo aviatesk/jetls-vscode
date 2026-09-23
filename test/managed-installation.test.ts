@@ -550,6 +550,133 @@ test("installs without probing a current generation stamped for another pin", as
   });
 });
 
+test("adopts a retained generation after switching back to its pin", async () => {
+  await withFixture(async (fixture) => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const current = await seedGeneration(
+      fixture.storagePath,
+      fixture.juliaPath,
+      { id: "2026-08-05-current" },
+    );
+    await writeFile(
+      installStampPath(current),
+      JSON.stringify({ revision: "2026-08-05", julia: "1.12.2" }),
+    );
+    const containerPath = path.dirname(current);
+    const older = await seedUnreferencedGeneration(
+      containerPath,
+      `${JETLS_REVISION}-older`,
+      true,
+    );
+    await writeFile(lastUsedPath(older), "");
+    await setAgeMs(lastUsedPath(older), 2 * dayMs);
+    const recent = await seedUnreferencedGeneration(
+      containerPath,
+      `${JETLS_REVISION}-recent`,
+      true,
+    );
+    await writeFile(lastUsedPath(recent), "");
+    await setAgeMs(lastUsedPath(recent), dayMs);
+    // Stamped for another Julia patch version, so not adoptable even
+    // though it was used last.
+    const otherPatch = await seedUnreferencedGeneration(
+      containerPath,
+      `${JETLS_REVISION}-other-patch`,
+      false,
+    );
+    await writeFile(
+      installStampPath(otherPatch),
+      JSON.stringify({ revision: JETLS_REVISION, julia: "1.12.1" }),
+    );
+    await writeFile(lastUsedPath(otherPatch), "");
+    const fake = standardRunner(fixture.juliaPath);
+
+    const installation = await ensureManagedJETLS({
+      storagePath: fixture.storagePath,
+      environment: fixture.environment,
+      processRunner: fake.runner,
+    });
+
+    assert.equal(installation.depotPath, recent);
+    assert.equal(await readCurrentGeneration(containerPath), recent);
+    assert.equal(callsWithScript(fake.calls, "Pkg.Apps.add").length, 0);
+    assert.equal(jetlsVersionCalls(fake.calls).length, 0);
+    assert.ok(Date.now() - (await stat(lastUsedPath(recent))).mtimeMs < dayMs);
+  });
+});
+
+test("does not adopt generations cleanup may be removing", async () => {
+  await withFixture(async (fixture) => {
+    const current = await seedGeneration(
+      fixture.storagePath,
+      fixture.juliaPath,
+      { id: "2026-08-05-current" },
+    );
+    await writeFile(
+      installStampPath(current),
+      JSON.stringify({ revision: "2026-08-05", julia: "1.12.2" }),
+    );
+    const containerPath = path.dirname(current);
+    // Within the retention, but not by the adoption margin.
+    const aged = await seedUnreferencedGeneration(
+      containerPath,
+      `${JETLS_REVISION}-aged`,
+      true,
+    );
+    await writeFile(lastUsedPath(aged), "");
+    await setAgeMs(lastUsedPath(aged), 6.5 * 24 * 60 * 60 * 1000);
+    // Fresh by its directory mtime alone, as while a removal proceeds.
+    const unmarked = await seedUnreferencedGeneration(
+      containerPath,
+      `${JETLS_REVISION}-unmarked`,
+      true,
+    );
+    const fake = standardRunner(fixture.juliaPath);
+
+    const installation = await ensureManagedJETLS({
+      storagePath: fixture.storagePath,
+      environment: fixture.environment,
+      processRunner: fake.runner,
+    });
+
+    assert.notEqual(installation.depotPath, aged);
+    assert.notEqual(installation.depotPath, unmarked);
+    assert.equal(callsWithScript(fake.calls, "Pkg.Apps.add").length, 1);
+  });
+});
+
+test("does not adopt a superseded generation of the current pin", async () => {
+  await withFixture(async (fixture) => {
+    const current = await seedGeneration(
+      fixture.storagePath,
+      fixture.juliaPath,
+      { stamped: false },
+    );
+    const superseded = await seedUnreferencedGeneration(
+      path.dirname(current),
+      `${JETLS_REVISION}-superseded`,
+      true,
+    );
+    await writeFile(lastUsedPath(superseded), "");
+    const fake = standardRunner(fixture.juliaPath, {
+      jetlsVersions: [
+        failure(1, "", "broken\n"),
+        success(`jetls version ${JETLS_REVISION}, julia version 1.12.2\n`),
+      ],
+    });
+
+    const installation = await ensureManagedJETLS({
+      storagePath: fixture.storagePath,
+      environment: fixture.environment,
+      processRunner: fake.runner,
+    });
+
+    assert.notEqual(installation.depotPath, superseded);
+    assert.notEqual(installation.depotPath, current);
+    assert.equal(callsWithScript(fake.calls, "Pkg.Apps.add").length, 1);
+  });
+});
+
 test("invalidating the stamp restores the version probe", async () => {
   await withFixture(async (fixture) => {
     await seedGeneration(fixture.storagePath, fixture.juliaPath, {
