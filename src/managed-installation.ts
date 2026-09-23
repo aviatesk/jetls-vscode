@@ -1162,18 +1162,36 @@ export function installStampPath(generationPath: string): string {
   return path.join(generationPath, INSTALL_STAMP_FILE);
 }
 
+async function readInstallStamp(
+  generationPath: string,
+): Promise<{ revision?: unknown; julia?: unknown } | undefined> {
+  try {
+    return JSON.parse(
+      await readFile(installStampPath(generationPath), "utf8"),
+    ) as { revision?: unknown; julia?: unknown };
+  } catch {
+    return undefined;
+  }
+}
+
 async function matchesInstallStamp(
   generationPath: string,
   juliaVersion: string,
 ): Promise<boolean> {
-  try {
-    const stamp = JSON.parse(
-      await readFile(installStampPath(generationPath), "utf8"),
-    ) as { revision?: unknown; julia?: unknown };
-    return stamp.revision === JETLS_REVISION && stamp.julia === juliaVersion;
-  } catch {
-    return false;
-  }
+  const stamp = await readInstallStamp(generationPath);
+  return stamp?.revision === JETLS_REVISION && stamp.julia === juliaVersion;
+}
+
+// A generation only ever holds the pin it was installed from, and only a
+// successful verification of that pin writes its stamp, so a stamp for
+// another pin settles the verification in advance. Probing anyway would
+// load (and after a Julia patch update, fully re-precompile) the old
+// JETLS just to fail.
+async function isStampedForAnotherPin(
+  generationPath: string,
+): Promise<boolean> {
+  const revision = (await readInstallStamp(generationPath))?.revision;
+  return typeof revision === "string" && revision !== JETLS_REVISION;
 }
 
 async function writeInstallStamp(
@@ -1446,13 +1464,14 @@ async function installGeneration(
 }
 
 // Resolves the generation to launch: the stamped current generation when
-// it matches, a re-verified current generation after a stamp mismatch
-// (e.g. a Julia patch update or a dropped stamp), and a freshly
-// installed generation otherwise. A failed or crashed installation
-// leaves the previous current generation untouched — even a process that
-// outlives its host only ever writes to the unpublished generation it
-// was producing, which cleanup eventually removes — so nothing needs
-// backups or restore transactions, and a retry can start immediately.
+// it matches, a re-verified current generation after a Julia patch
+// update or a dropped stamp, and a freshly installed generation
+// otherwise (including after a pin change). A failed or crashed
+// installation leaves the previous current generation untouched — even a
+// process that outlives its host only ever writes to the unpublished
+// generation it was producing, which cleanup eventually removes — so
+// nothing needs backups or restore transactions, and a retry can start
+// immediately.
 async function resolveGeneration(
   context: RuntimeContext,
   baseEnvironment: NodeJS.ProcessEnv,
@@ -1504,7 +1523,11 @@ async function resolveGeneration(
           return await settle(stamped);
         }
         const current = await readCurrentGeneration(context.containerPath);
-        if (current !== undefined && (await isFile(managedManifest(current)))) {
+        if (
+          current !== undefined &&
+          (await isFile(managedManifest(current))) &&
+          !(await isStampedForAnotherPin(current))
+        ) {
           emit(progress, "Verifying JETLS...");
           try {
             await verifyPinnedJETLS(

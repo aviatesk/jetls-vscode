@@ -523,6 +523,33 @@ test("re-verifies when the stamp records another Julia patch version", async () 
   });
 });
 
+test("installs without probing a current generation stamped for another pin", async () => {
+  await withFixture(async (fixture) => {
+    const seeded = await seedGeneration(fixture.storagePath, fixture.juliaPath);
+    await writeFile(
+      installStampPath(seeded),
+      JSON.stringify({ revision: "2026-08-05", julia: "1.12.2" }),
+    );
+    const fake = standardRunner(fixture.juliaPath);
+
+    const installation = await ensureManagedJETLS({
+      storagePath: fixture.storagePath,
+      environment: fixture.environment,
+      processRunner: fake.runner,
+    });
+
+    assert.notEqual(installation.depotPath, seeded);
+    assert.equal(callsWithScript(fake.calls, "Pkg.Apps.add").length, 1);
+    // The only probe verifies the fresh installation.
+    const verifyCalls = jetlsVersionCalls(fake.calls);
+    assert.equal(verifyCalls.length, 1);
+    assert.equal(
+      verifyCalls[0].options.env.JULIA_LOAD_PATH,
+      managedEnvironment(installation.depotPath),
+    );
+  });
+});
+
 test("invalidating the stamp restores the version probe", async () => {
   await withFixture(async (fixture) => {
     await seedGeneration(fixture.storagePath, fixture.juliaPath, {
