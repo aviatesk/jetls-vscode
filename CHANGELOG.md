@@ -17,6 +17,10 @@ This file describes changes delivered by extension updates, including updates to
 
 ### VS Code extension
 
+#### Fixed
+
+- Fixed an unnecessary delay before reinstalling the managed server after an extension update changes the pinned JETLS release: the previous installation is no longer loaded just to confirm that it is outdated, which could take several minutes in the worst case.
+
 ## v2026.9.23
 
 - Commit: [`v2026.9.23`](https://github.com/aviatesk/jetls-vscode/commit/v2026.9.23)
