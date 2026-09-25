@@ -4,7 +4,7 @@
   "description": "A new language server for Julia",
   "author": "Shuhei Kadowaki",
   "license": "MIT",
-  "version": "2026.9.23",
+  "version": "2026.9.25",
   "repository": {
     "type": "git",
     "url": "https://github.com/aviatesk/jetls-vscode"
@@ -202,7 +202,7 @@
                 },
                 "testrunner": {
                   "default": true,
-                  "markdownDescription": "Show `Run`/`Debug` code lenses above `@testset` blocks. Some editors (e.g., Zed) show these as code actions, causing duplication; zed-julia defaults to false.",
+                  "markdownDescription": "Show `Run`/`Debug` code lenses above `@testset` blocks. Some editors (e.g., Zed) show these as code actions, causing duplication.",
                   "type": "boolean"
                 }
               },
