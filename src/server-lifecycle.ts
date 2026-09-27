@@ -39,9 +39,12 @@ import {
   VersionPreflight,
 } from "./preflight";
 import { StartupStatusBar } from "./status-bar";
+import { TestsetController } from "./test-controller";
+import { supportsTestsets } from "./testsets";
 import { connectSocketTransport, TransportOptions } from "./transport";
 
 let languageClient: LanguageClient;
+let testsetController: TestsetController | undefined;
 let outputChannel: LogOutputChannel;
 let statusBar: StartupStatusBar;
 let deactivating = false;
@@ -560,6 +563,10 @@ async function startLanguageServer() {
           return next(sections);
         },
       },
+      executeCommand: (command, args, next) =>
+        testsetController === undefined
+          ? next(command, args)
+          : testsetController.executeCommand(command, args, next),
       // `editor.action.showReferences` is a built-in VSCode command that
       // requires actual `vscode.Uri`/`vscode.Position`/`vscode.Location`
       // instances, but server-sent command arguments arrive as plain JSON.
@@ -698,7 +705,18 @@ async function startLanguageServer() {
     },
   );
 
+  if (
+    supportsTestsets(languageClient.initializeResult?.capabilities.experimental)
+  ) {
+    testsetController = new TestsetController(languageClient);
+  }
+
   statusBar.show("ready");
+}
+
+function disposeTestsetController(): void {
+  testsetController?.dispose();
+  testsetController = undefined;
 }
 
 async function restartLanguageServer() {
@@ -708,6 +726,7 @@ async function restartLanguageServer() {
   if (languageClient?.needsStop()) {
     statusBar.show("restarting");
   }
+  disposeTestsetController();
   // A client that never reached the `Running` state (e.g. one left stuck
   // in `Starting` by a start timeout) cannot be stopped: `stop()` throws,
   // which used to abort — and thereby permanently block — every restart.
@@ -853,6 +872,7 @@ export async function shutdownServerLifecycle(): Promise<void> {
     );
   }
   await awaitWithTimeout(restartRunner.active, TIMEOUTS.serverStop);
+  disposeTestsetController();
   await stopClient(languageClient, TIMEOUTS.serverStop, (message) =>
     outputChannel?.appendLine(message),
   );

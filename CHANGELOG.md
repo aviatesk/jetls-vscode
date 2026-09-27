@@ -17,6 +17,10 @@ This file describes changes delivered by extension updates, including updates to
 
 ### VS Code extension
 
+#### Added
+
+- Added VS Code Testing API integration for the `@testset`s of open Julia files, powered by the JETLS [TestRunner integration](https://aviatesk.github.io/JETLS.jl/release/testrunner/): `@testset`s can be run from the editor gutter and the Test Explorer, which show the results of the individual `@testset`s, including nested ones. `@testset`s run from code lenses and code actions are reported there as well.
+
 ## v2026.9.27
 
 - Commit: [`v2026.9.27`](https://github.com/aviatesk/jetls-vscode/commit/v2026.9.27)
