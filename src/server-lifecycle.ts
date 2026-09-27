@@ -48,6 +48,8 @@ import {
   VersionPreflight,
 } from "./preflight";
 import { ServerStartupStatus, StartupStatusBar } from "./status-bar";
+import { TestsetController } from "./test-controller";
+import { supportsTestsets } from "./testsets";
 import { connectSocketTransport, TransportOptions } from "./transport";
 import {
   createDocumentSelector,
@@ -159,6 +161,7 @@ class FolderServer {
   // other windows judges liveness by them, and they otherwise only record
   // starts, which a long-lived session outlives.
   managedLastUsedRefresh: NodeJS.Timeout | undefined;
+  testsetController: TestsetController | undefined;
 
   constructor(public folder: vscode.WorkspaceFolder | undefined) {
     this.key = getClientKey(folder);
@@ -909,6 +912,10 @@ async function startLanguageServer(server: FolderServer) {
           return next(sections);
         },
       },
+      executeCommand: (command, args, next) =>
+        server.testsetController === undefined
+          ? next(command, args)
+          : server.testsetController.executeCommand(command, args, next),
       // `editor.action.showReferences` is a built-in VSCode command that
       // requires actual `vscode.Uri`/`vscode.Position`/`vscode.Location`
       // instances, but server-sent command arguments arrive as plain JSON.
@@ -1053,11 +1060,23 @@ async function startLanguageServer(server: FolderServer) {
     },
   );
 
+  if (
+    supportsTestsets(languageClient.initializeResult?.capabilities.experimental)
+  ) {
+    server.testsetController = new TestsetController(
+      languageClient,
+      server.folder,
+      (document) => folderServerForUri(document.uri) === server,
+    );
+  }
+
   server.showStatus("ready");
 }
 
 async function stopLanguageServer(server: FolderServer) {
   stopManagedLastUsedRefresh(server);
+  server.testsetController?.dispose();
+  server.testsetController = undefined;
   // A client that never reached the `Running` state (e.g. one left stuck
   // in `Starting` by a start timeout) cannot be stopped: `stop()` throws,
   // which used to abort — and thereby permanently block — every restart.

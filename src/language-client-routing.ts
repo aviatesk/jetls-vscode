@@ -122,10 +122,17 @@ export class LanguageClientRouting implements vscode.Disposable {
       );
       return undefined;
     }
-    return client.sendRequest(ExecuteCommandRequest.type, {
-      command,
-      arguments: args,
-    });
+    const executeCommand = (command: string, args: unknown[]) =>
+      client.sendRequest(ExecuteCommandRequest.type, {
+        command,
+        arguments: args,
+      });
+    // Honor the client's middleware as the `ExecuteCommandFeature` whose
+    // registration this replaces would.
+    const middleware = client.middleware.executeCommand;
+    return middleware
+      ? middleware(command, args, executeCommand)
+      : executeCommand(command, args);
   }
 
   private registerExecuteCommandRouters(): void {
