@@ -90,7 +90,9 @@ Write extension-specific changes under `### VS Code extension` in the
 `Unreleased` section of [`CHANGELOG.md`](./CHANGELOG.md), using `#### Added`,
 `#### Changed`, `#### Fixed`, or similar headings. During
 [release preparation](#publishing), the pin and language-server placeholders are
-filled in automatically. Review the generated notes in the release PR.
+filled in automatically, and an empty `### VS Code extension` section is
+released as stating that the extension itself has no changes. Review the
+generated notes in the release PR.
 
 ## Publishing
 

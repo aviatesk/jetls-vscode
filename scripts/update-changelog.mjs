@@ -173,7 +173,7 @@ function finalizeChangelog(
   }
   const clientSection = unreleased.slice(subsections[1].end).trim()
     ? unreleased.slice(subsections[1].start).trim()
-    : "";
+    : "### VS Code extension\n\nNo changes to the extension itself.";
   const released = [
     `${clientMetadata(tag, previousTag)}\n` +
       `- Pinned JETLS: [\`${revision}\`](${SERVER_URL}/releases/tag/${revision})`,

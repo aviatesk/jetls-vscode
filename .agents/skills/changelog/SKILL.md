@@ -37,6 +37,8 @@ order):
 
 Keep the pin and `### Language server` placeholders in `Unreleased`; they are
 filled in during release preparation. Do not add server release links by hand.
+Leave `### VS Code extension` empty when there are no extension changes; release
+preparation then states that the extension itself has no changes.
 
 ## Release metadata lines
 
