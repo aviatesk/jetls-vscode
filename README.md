@@ -235,7 +235,10 @@ For detailed configuration options and examples, see the
       ]
     },
     "testrunner": {
-      "executable": "/path/to/custom/testrunner"
+      "env": {
+        "JULIAUP_CHANNEL": "1.12"
+      },
+      "julia_args": ["--threads=4"]
     }
   }
 }
