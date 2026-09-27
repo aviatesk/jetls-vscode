@@ -217,11 +217,13 @@ For detailed configuration options and examples, see the
 ```json
 {
   "jetls-client.settings": {
+    // Wait 2 seconds after save before running full analysis
     "full_analysis": {
       "debounce": 2.0
     },
     // Use JuliaFormatter instead of Runic
     "formatter": "JuliaFormatter",
+    // Change the severity of specific diagnostics
     "diagnostic": {
       "patterns": [
         // Suppress toplevel/inference warnings in test folder
@@ -235,9 +237,11 @@ For detailed configuration options and examples, see the
       ]
     },
     "testrunner": {
+      // Run tests with Julia 1.12 via juliaup
       "env": {
         "JULIAUP_CHANNEL": "1.12"
       },
+      // Run tests with 4 threads
       "julia_args": ["--threads=4"]
     }
   }
