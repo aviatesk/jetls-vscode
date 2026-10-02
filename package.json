@@ -522,7 +522,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.3",
     "@types/vscode": "~1.96.0",
     "@types/which": "^3.0.4",
     "@typescript/native": "npm:typescript@^7.0.2",
