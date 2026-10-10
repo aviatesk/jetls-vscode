@@ -17,6 +17,16 @@ This file describes changes delivered by extension updates, including updates to
 
 ### VS Code extension
 
+#### Added
+
+- Added support for VS Code multi-root workspaces. JETLS Client now launches one server for each top-level folder, applies folder-scoped launch settings and `.JETLSConfig.toml`, and routes notebook cells, virtual documents, and commands to the server for their owning project. While a single folder is open, its server also handles files and notebooks outside it, such as dependency sources opened through go-to-definition, with the [limited support](https://aviatesk.github.io/JETLS.jl/release/analysis/#analysis/live/fallback) JETLS provides for files outside the workspace root; while multiple folders are open, such files are not handled. Unsaved documents are handled by the server of the first folder. Adding or removing a workspace folder starts or stops only that folder's server, except that switching between a single folder and multiple folders restarts the remaining server. `JETLS Client: Restart JETLS Language Server` restarts every server. (Closed https://github.com/aviatesk/JETLS.jl/issues/795, https://github.com/aviatesk/JETLS.jl/issues/970)
+
+#### Changed
+
+- Changes to resource-scoped launch settings now restart only the affected folder's server.
+
+- Each server's output (server logs and process stderr) now goes to its own `JETLS Language Server (<folder>)` output channel, keeping the `JETLS` channel for extension-level logs such as the managed installation output. Clicking the status bar item opens the channel of the server it currently reports.
+
 ## v2026.10.8
 
 - Commit: [`v2026.10.8`](https://github.com/aviatesk/jetls-vscode/commit/v2026.10.8)

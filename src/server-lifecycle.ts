@@ -8,6 +8,7 @@ import {
   State,
   TransportKind,
 } from "vscode-languageclient/node";
+import { TextDocumentContentRefreshRequest } from "vscode-languageserver-protocol";
 
 import { CoalescingTaskRunner } from "./coalescing-task-runner";
 import { stopClient } from "./client-shutdown";
@@ -17,16 +18,23 @@ import {
   TIMEOUTS,
 } from "./constants";
 import {
+  isExecuteCommandFeature,
+  isTextDocumentContentFeature,
+  LanguageClientRouting,
+} from "./language-client-routing";
+import {
   ensureManagedJETLS,
   invalidateInstallStamp,
   LAST_USED_REFRESH_INTERVAL,
   ManagedInstallationCancelledError,
   ManagedJETLSError,
+  ManagedJETLSInstallation,
   managedJETLSCommands,
   resolveManagedStoragePath,
   touchManagedInstallation,
 } from "./managed-installation";
 import {
+  affectsServerConfig,
   getServerConfig,
   hasServerConfigChanged,
   isManagedExecutable,
@@ -38,16 +46,31 @@ import {
   UnsupportedJETLSVersionError,
   VersionPreflight,
 } from "./preflight";
-import { StartupStatusBar } from "./status-bar";
+import { ServerStartupStatus, StartupStatusBar } from "./status-bar";
 import { connectSocketTransport, TransportOptions } from "./transport";
+import {
+  createDocumentSelector,
+  getClientDisplayName,
+  getClientKey,
+  getEffectiveWorkspaceFolders,
+  getOutermostWorkspaceFolder,
+  scopeRegistrationParams,
+} from "./workspace-folders";
 
-let languageClient: LanguageClient;
 let outputChannel: LogOutputChannel;
 let statusBar: StartupStatusBar;
 let deactivating = false;
-let currentServerConfig: ServerConfig | null = null;
-let cancelServerStartup: (() => void) | undefined;
 let globalStoragePath: string;
+let routing: LanguageClientRouting;
+let nextServerId = 0;
+
+const folderServers = new Map<string, FolderServer>();
+// Teardowns of removed folders' servers: a re-added folder's new server
+// starts only after them, so the two servers never run side by side.
+const retiringTeardowns = new Map<string, Promise<void>>();
+// Kept until deactivation: a stopped server's process may still print
+// after its folder was removed, and writing to a disposed channel throws.
+const folderOutputChannels = new Map<string, LogOutputChannel>();
 
 export function activateServerLifecycle(
   channel: LogOutputChannel,
@@ -58,6 +81,10 @@ export function activateServerLifecycle(
   statusBar = bar;
   globalStoragePath = context.globalStorageUri.fsPath;
   deactivating = false;
+  routing = new LanguageClientRouting(context, (uri) => {
+    const client = folderServerForUri(uri)?.client;
+    return client?.isRunning() ? client : undefined;
+  });
 }
 
 function executableEnvironment(executable: {
@@ -69,14 +96,147 @@ function executableEnvironment(executable: {
   };
 }
 
-const versionPreflight = new VersionPreflight({
-  timeoutMs: TIMEOUTS.precompilation,
-  terminationTimeoutMs: TIMEOUTS.processTermination,
-  platform: process.platform,
-  minimumRevision: MINIMUM_CUSTOM_JETLS_REVISION,
-  appendLine: (message) => outputChannel.appendLine(message),
-  onPrecompiling: () => statusBar.show("precompiling"),
-});
+function getFolderServerConfig(
+  folder: vscode.WorkspaceFolder | undefined,
+): ServerConfig {
+  return getServerConfig(
+    vscode.workspace.getConfiguration("jetls-client", folder?.uri),
+  );
+}
+
+function getFolderOutputChannel(
+  folder: vscode.WorkspaceFolder | undefined,
+): LogOutputChannel {
+  const key = getClientKey(folder);
+  let channel = folderOutputChannels.get(key);
+  if (channel === undefined) {
+    channel = vscode.window.createOutputChannel(getClientDisplayName(folder), {
+      log: true,
+    });
+    folderOutputChannels.set(key, channel);
+  }
+  return channel;
+}
+
+/**
+ * The language server of one top-level workspace folder, or of the whole
+ * window when no folder is open. Each server has its own restart runner,
+ * so a slow start of one folder's server never delays another's.
+ */
+class FolderServer {
+  readonly key: string;
+  /** Unique per server, unlike `key`, which a re-added folder reuses. */
+  readonly id = `jetls-client-${nextServerId++}`;
+  readonly outputChannel: LogOutputChannel;
+  readonly preflight: VersionPreflight;
+  readonly restartRunner = new CoalescingTaskRunner(() =>
+    restartLanguageServer(this),
+  );
+  client: LanguageClient | undefined;
+  serverConfig: ServerConfig | null = null;
+  /**
+   * Whether the client handles every file rather than only those in its
+   * folder, which is the case while at most one workspace folder is open.
+   */
+  unscoped = false;
+  retired = false;
+  cancelServerStartup: (() => void) | undefined;
+  // Aborts this server's wait for the managed setup, so a restart or
+  // removal does not wait behind a long installation.
+  managedSetupAbort: AbortController | undefined;
+  // Re-touches the running managed server's last-used markers: cleanup in
+  // other windows judges liveness by them, and they otherwise only record
+  // starts, which a long-lived session outlives.
+  managedLastUsedRefresh: NodeJS.Timeout | undefined;
+
+  constructor(public folder: vscode.WorkspaceFolder | undefined) {
+    this.key = getClientKey(folder);
+    this.outputChannel = getFolderOutputChannel(folder);
+    this.preflight = new VersionPreflight({
+      timeoutMs: TIMEOUTS.precompilation,
+      terminationTimeoutMs: TIMEOUTS.processTermination,
+      platform: process.platform,
+      minimumRevision: MINIMUM_CUSTOM_JETLS_REVISION,
+      appendLine: (message) => this.outputChannel.appendLine(message),
+      onPrecompiling: () => this.showStatus("precompiling"),
+    });
+  }
+
+  /** Whether the running start is no longer wanted. */
+  get superseded(): boolean {
+    return deactivating || this.retired || this.restartRunner.pending;
+  }
+
+  showStatus(status: ServerStartupStatus): void {
+    if (!this.retired) {
+      statusBar.show(this.id, status);
+    }
+  }
+}
+
+/**
+ * The key of the server handling unsaved documents: that of the first
+ * workspace folder. VS Code restarts extensions when the first folder
+ * changes, so the owner never changes while its server runs.
+ */
+function untitledOwnerKey(): string {
+  return getClientKey(
+    getEffectiveWorkspaceFolders(vscode.workspace.workspaceFolders ?? [])[0],
+  );
+}
+
+function folderServerForUri(uri: vscode.Uri): FolderServer | undefined {
+  if (folderServers.size === 1) {
+    return folderServers.values().next().value;
+  }
+  const uriString = uri.toString();
+  const sourceUri =
+    vscode.workspace.notebookDocuments.find((notebook) =>
+      notebook
+        .getCells()
+        .some((cell) => cell.document.uri.toString() === uriString),
+    )?.uri ?? uri;
+  const folder = vscode.workspace.getWorkspaceFolder(sourceUri);
+  if (folder) {
+    return folderServers.get(
+      getClientKey(
+        getOutermostWorkspaceFolder(
+          folder,
+          vscode.workspace.workspaceFolders ?? [],
+        ),
+      ),
+    );
+  }
+  return sourceUri.scheme === "untitled"
+    ? folderServers.get(untitledOwnerKey())
+    : undefined;
+}
+
+type LanguageClientFeature = Parameters<LanguageClient["registerFeature"]>[0];
+
+// Every server would register the same VS Code commands and virtual
+// document providers, which VS Code rejects, so `LanguageClientRouting`
+// registers them once instead.
+class JETLSLanguageClient extends LanguageClient {
+  override registerFeature(feature: LanguageClientFeature): void {
+    if (
+      isExecuteCommandFeature(feature) ||
+      isTextDocumentContentFeature(feature)
+    ) {
+      const routedFeature = feature as LanguageClientFeature & {
+        register(data: unknown): void;
+        initialize?(capabilities: unknown, documentSelector: unknown): void;
+      };
+      routedFeature.register = () => undefined;
+      if (isTextDocumentContentFeature(feature)) {
+        // Its `initialize` runs on every (re)start and would replace the
+        // refresh request handler that routes to `LanguageClientRouting`.
+        routedFeature.initialize = () => undefined;
+      }
+    }
+    super.registerFeature(feature);
+  }
+}
 
 // The one-line notification and tooltip text; the full failure details
 // stay in the output channel. Setup failures always arrive as
@@ -91,7 +251,7 @@ function managedFailureSummary(err: Error): string {
   return `Failed to start the managed JETLS server: ${line}`;
 }
 
-function showManagedFailureNotification(err: Error): void {
+function showManagedFailureNotification(err: Error, serverId?: string): void {
   const details = err instanceof ManagedJETLSError ? err : undefined;
   const retryButton = "Retry";
   const outputButton = "Show JETLS output";
@@ -112,7 +272,7 @@ function showManagedFailureNotification(err: Error): void {
       if (selection === retryButton) {
         requestLanguageServerRestart();
       } else if (selection === outputButton) {
-        void vscode.commands.executeCommand("jetls-client.showOutput");
+        showOutputChannel(serverId);
       } else if (selection === settingsButton) {
         void vscode.commands.executeCommand(
           "workbench.action.openSettings",
@@ -137,24 +297,31 @@ function handleManagedSetupFailure(err: Error): void {
   showManagedFailureNotification(err);
 }
 
-function handleManagedServerFailure(err: Error, depotPath: string): void {
-  outputChannel.appendLine(
+function handleManagedServerFailure(
+  server: FolderServer,
+  err: Error,
+  depotPath: string,
+): void {
+  server.outputChannel.appendLine(
     `[jetls-client] Failed to start the managed JETLS: ${err.message}`,
   );
   void invalidateInstallStamp(depotPath).catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] Failed to invalidate the managed install stamp: ${message}.`,
     );
   });
-  showManagedFailureNotification(err);
+  showManagedFailureNotification(err, server.id);
 }
 
 // Handles a custom executable that predates the launch arguments this
 // client uses: without the preflight gate the server would reject the
 // arguments and the start would only fail as an opaque timeout.
-function handleUnsupportedExecutable(err: UnsupportedJETLSVersionError): void {
-  outputChannel.appendLine(
+function handleUnsupportedExecutable(
+  server: FolderServer,
+  err: UnsupportedJETLSVersionError,
+): void {
+  server.outputChannel.appendLine(
     `[jetls-client] Failed to start JETLS: ${err.message}`,
   );
   const settingsButton = "Open settings";
@@ -171,13 +338,17 @@ function handleUnsupportedExecutable(err: UnsupportedJETLSVersionError): void {
 }
 
 // Handles spawn errors of custom executable configurations.
-function handleSpawnError(err: Error, command: string): void {
+function handleSpawnError(
+  server: FolderServer,
+  err: Error,
+  command: string,
+): void {
   const errno = err as NodeJS.ErrnoException;
   if (errno.code === "ENOENT") {
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] Failed to start JETLS: Command not found: ${command}`,
     );
-    outputChannel.appendLine(`[jetls-client] PATH: ${process.env.PATH}`);
+    server.outputChannel.appendLine(`[jetls-client] PATH: ${process.env.PATH}`);
     void vscode.window.showErrorMessage(
       `JETLS executable not found: "${command}". Check the ` +
         "`jetls-client.executable` setting, or remove its `path`/command to " +
@@ -185,7 +356,7 @@ function handleSpawnError(err: Error, command: string): void {
         "restart VS Code to refresh the PATH.",
     );
   } else {
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] Failed to start JETLS: ${err.message}`,
     );
   }
@@ -216,19 +387,215 @@ function startWithTimeout(
   });
 }
 
-async function startLanguageServer() {
-  if (deactivating) {
+/**
+ * A managed JETLS setup shared by the servers that need the same
+ * installation, so that concurrently starting servers install once and a
+ * failed or cancelled installation is reported once instead of retried by
+ * each server in turn. It belongs to the extension rather than to any
+ * server: only its notification's Cancel and deactivation abort it.
+ */
+class ManagedSetup {
+  readonly installation: Promise<ManagedJETLSInstallation>;
+  private readonly abortController = new AbortController();
+  private installProgress: vscode.Progress<{ message?: string }> | undefined;
+  private installPhase: string | undefined;
+
+  constructor(
+    configuredStoragePath: string,
+    environment: NodeJS.ProcessEnv,
+    forceInstall: boolean,
+  ) {
+    // Resolving the storage path inside the async function turns an
+    // invalid setting into a setup failure.
+    this.installation = (async () =>
+      ensureManagedJETLS({
+        storagePath: resolveManagedStoragePath(
+          globalStoragePath,
+          configuredStoragePath,
+        ),
+        environment,
+        logger: (message) =>
+          outputChannel.appendLine(`[jetls-client] ${message}`),
+        progress: (message) => {
+          statusBar.showManagedProgress(message);
+          this.installPhase = message.startsWith("Installing JETLS: ")
+            ? message.slice("Installing JETLS: ".length).replace(/\.\.\.$/, "")
+            : undefined;
+          this.installProgress?.report({
+            message: this.installPhase ?? message,
+          });
+        },
+        forceInstall,
+        signal: this.abortController.signal,
+        onInstallOutput: (line) => {
+          statusBar.showManagedProgressDetail(line);
+          this.installProgress?.report({
+            message:
+              this.installPhase === undefined
+                ? line
+                : `${this.installPhase} — ${line}`,
+          });
+        },
+        onInstallStep: () => this.beginInstallStep(),
+      }))();
+    void this.installation.then(
+      () => statusBar.clearManagedProgress(),
+      (err) => {
+        statusBar.clearManagedProgress();
+        this.reportFailure(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  }
+
+  abort(): void {
+    this.abortController.abort();
+  }
+
+  /** Waits for the installation; aborting `signal` only ends this wait. */
+  wait(signal: AbortSignal): Promise<ManagedJETLSInstallation> {
+    return new Promise((resolve, reject) => {
+      const onAbort = (): void =>
+        reject(new ManagedInstallationCancelledError());
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+      void this.installation
+        .then(resolve, reject)
+        .finally(() => signal.removeEventListener("abort", onAbort));
+    });
+  }
+
+  // The actual installation (the only open-ended long step) gets a
+  // cancellable progress notification for its duration; routine
+  // starts stay on the status bar alone.
+  private beginInstallStep(): () => void {
+    let ended = false;
+    let end!: () => void;
+    const done = new Promise<void>((resolve) => {
+      end = resolve;
+    });
+    void vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Installing JETLS",
+        cancellable: true,
+      },
+      (progress, token) => {
+        // VS Code runs this task asynchronously, so a step that
+        // failed immediately may have ended before it: publishing
+        // the progress then would leave a stale reference behind
+        // the cleanup below.
+        if (!ended) {
+          this.installProgress = progress;
+          const cancellation = token.onCancellationRequested(() =>
+            this.abort(),
+          );
+          void done.then(() => cancellation.dispose());
+        }
+        return done;
+      },
+    );
+    return () => {
+      ended = true;
+      this.installProgress = undefined;
+      end();
+    };
+  }
+
+  private reportFailure(err: Error): void {
+    if (deactivating) {
+      return;
+    }
+    if (!(err instanceof ManagedInstallationCancelledError)) {
+      handleManagedSetupFailure(err);
+      return;
+    }
+    // Cancelled from the installation notification (deactivation would
+    // have set the flag above): the notification offers the way back in.
+    const retryButton = "Retry";
+    const outputButton = "Show JETLS output";
+    void vscode.window
+      .showInformationMessage(
+        "The JETLS installation was cancelled.",
+        retryButton,
+        outputButton,
+      )
+      .then((choice) => {
+        if (choice === retryButton) {
+          requestLanguageServerRestart();
+        } else if (choice === outputButton) {
+          showOutputChannel();
+        }
+      });
+  }
+}
+
+const managedSetups = new Map<string, ManagedSetup>();
+
+async function setUpManagedJETLS(
+  server: FolderServer,
+  serverConfig: ServerConfig,
+  executable: { env?: Record<string, string> },
+): Promise<ManagedJETLSInstallation> {
+  const forceInstall = forceManagedInstall;
+  const setupKey = JSON.stringify({
+    storagePath: serverConfig.managedStoragePath,
+    env: executable.env ?? {},
+    forceInstall,
+  });
+  let setup = managedSetups.get(setupKey);
+  if (setup === undefined) {
+    setup = new ManagedSetup(
+      serverConfig.managedStoragePath,
+      executableEnvironment(executable),
+      forceInstall,
+    );
+    managedSetups.set(setupKey, setup);
+    void setup.installation
+      .catch(() => undefined)
+      .finally(() => managedSetups.delete(setupKey));
+  }
+  const setupAbort = new AbortController();
+  server.managedSetupAbort = setupAbort;
+  try {
+    const installation = await setup.wait(setupAbort.signal);
+    if (forceInstall) {
+      forceManagedInstall = false;
+    }
+    return installation;
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    // The setup itself notifies its failure once; each waiting server only
+    // reflects it.
+    if (!server.superseded) {
+      if (error instanceof ManagedInstallationCancelledError) {
+        statusBar.showManagedCancelled(server.id);
+      } else {
+        statusBar.showManagedFailure(server.id, managedFailureSummary(error));
+        server.outputChannel.appendLine(
+          `[jetls-client] Failed to set up the managed JETLS: ${error.message}`,
+        );
+      }
+    }
+    throw error;
+  } finally {
+    if (server.managedSetupAbort === setupAbort) {
+      server.managedSetupAbort = undefined;
+    }
+  }
+}
+
+async function startLanguageServer(server: FolderServer) {
+  if (server.superseded) {
     return;
   }
-  // The previous server (whose installation the refresh kept alive) is
-  // already stopped by the time a new start runs.
-  stopManagedLastUsedRefresh();
-  statusBar.show("checking");
+  server.showStatus("checking");
 
-  const serverConfig = getServerConfig(
-    vscode.workspace.getConfiguration("jetls-client"),
-  );
-  currentServerConfig = serverConfig;
+  const folder = server.folder;
+  const serverConfig = getFolderServerConfig(folder);
+  server.serverConfig = serverConfig;
   const managed = isManagedExecutable(serverConfig.executable);
 
   let resolvedCommands: JETLSCommands;
@@ -239,112 +606,12 @@ async function startLanguageServer() {
       threads?: string;
       env?: Record<string, string>;
     };
-    let installation;
-    const setupAbort = new AbortController();
-    managedSetupAbort = setupAbort;
-    let installProgress: vscode.Progress<{ message?: string }> | undefined;
-    let installPhase: string | undefined;
-    try {
-      installation = await ensureManagedJETLS({
-        storagePath: resolveManagedStoragePath(
-          globalStoragePath,
-          serverConfig.managedStoragePath,
-        ),
-        environment: executableEnvironment(executable),
-        logger: (message) =>
-          outputChannel.appendLine(`[jetls-client] ${message}`),
-        progress: (message) => {
-          statusBar.showManagedProgress(message);
-          installPhase = message.startsWith("Installing JETLS: ")
-            ? message.slice("Installing JETLS: ".length).replace(/\.\.\.$/, "")
-            : undefined;
-          installProgress?.report({ message: installPhase ?? message });
-        },
-        forceInstall: forceManagedInstall,
-        signal: setupAbort.signal,
-        onInstallOutput: (line) => {
-          statusBar.showManagedProgressDetail(line);
-          installProgress?.report({
-            message:
-              installPhase === undefined ? line : `${installPhase} — ${line}`,
-          });
-        },
-        // The actual installation (the only open-ended long step) gets a
-        // cancellable progress notification for its duration; routine
-        // starts stay on the status bar alone.
-        onInstallStep: () => {
-          let ended = false;
-          let end!: () => void;
-          const done = new Promise<void>((resolve) => {
-            end = resolve;
-          });
-          void vscode.window.withProgress(
-            {
-              location: vscode.ProgressLocation.Notification,
-              title: "Installing JETLS",
-              cancellable: true,
-            },
-            (progress, token) => {
-              // VS Code runs this task asynchronously, so a step that
-              // failed immediately may have ended before it: publishing
-              // the progress then would leave a stale reference behind
-              // the cleanup below.
-              if (!ended) {
-                installProgress = progress;
-                const cancellation = token.onCancellationRequested(() =>
-                  setupAbort.abort(),
-                );
-                void done.then(() => cancellation.dispose());
-              }
-              return done;
-            },
-          );
-          return () => {
-            ended = true;
-            installProgress = undefined;
-            end();
-          };
-        },
-      });
-      forceManagedInstall = false;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      if (
-        !deactivating &&
-        !restartRunner.pending &&
-        !(error instanceof ManagedInstallationCancelledError)
-      ) {
-        statusBar.showManagedFailure(managedFailureSummary(error));
-        handleManagedSetupFailure(error);
-      } else if (!deactivating && !restartRunner.pending) {
-        // Cancelled from the installation notification (a restart or
-        // deactivation would have set the flags above): no failure UI,
-        // but the status bar must not keep showing progress, and the
-        // notification offers the way back in.
-        statusBar.showManagedCancelled();
-        const retryButton = "Retry";
-        const outputButton = "Show JETLS output";
-        void vscode.window
-          .showInformationMessage(
-            "The JETLS installation was cancelled.",
-            retryButton,
-            outputButton,
-          )
-          .then((choice) => {
-            if (choice === retryButton) {
-              requestLanguageServerRestart();
-            } else if (choice === outputButton) {
-              void vscode.commands.executeCommand("jetls-client.showOutput");
-            }
-          });
-      }
-      throw error;
-    } finally {
-      if (managedSetupAbort === setupAbort) {
-        managedSetupAbort = undefined;
-      }
-    }
-    outputChannel.appendLine(
+    const installation = await setUpManagedJETLS(
+      server,
+      serverConfig,
+      executable,
+    );
+    server.outputChannel.appendLine(
       `[jetls-client] Using managed JETLS from ${installation.depotPath}`,
     );
     managedDepotPath = installation.depotPath;
@@ -355,9 +622,9 @@ async function startLanguageServer() {
       resolvedCommands = resolveJETLSCommands(serverConfig.executable);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      if (!deactivating) {
-        statusBar.show("failed");
-        outputChannel.appendLine(`[jetls-client] ${error.message}`);
+      if (!server.superseded) {
+        server.showStatus("failed");
+        server.outputChannel.appendLine(`[jetls-client] ${error.message}`);
         vscode.window.showErrorMessage(error.message);
       }
       throw error;
@@ -372,7 +639,7 @@ async function startLanguageServer() {
   if (commChannel === "auto") {
     commChannel = "pipe";
     if (vscode.env.remoteName) {
-      outputChannel.appendLine(
+      server.outputChannel.appendLine(
         `[jetls-client] Detected remote environment: ${vscode.env.remoteName}`,
       );
 
@@ -382,17 +649,17 @@ async function startLanguageServer() {
         vscode.env.remoteName === "attached-container"
       ) {
         commChannel = "stdio";
-        outputChannel.appendLine(
+        server.outputChannel.appendLine(
           `[jetls-client] Using stdio for container environment`,
         );
       }
     }
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] Auto-selected communication channel: ${commChannel}`,
     );
   }
 
-  outputChannel.appendLine(
+  server.outputChannel.appendLine(
     `[jetls-client] Using communication channel: ${commChannel}`,
   );
 
@@ -413,48 +680,52 @@ async function startLanguageServer() {
   // checked the command.
   if (!managed) {
     try {
-      await versionPreflight.run(baseCommand, versionArgs, spawnOptions);
+      await server.preflight.run(baseCommand, versionArgs, spawnOptions);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       // If a restart request is queued, this failure is most likely the
-      // deliberate kill from `requestLanguageServerRestart`; skip the error
-      // surface here and let the rerun repaint the status from "checking".
-      if (!deactivating && !restartRunner.pending) {
-        statusBar.show("failed");
+      // deliberate kill from `requestServerRestart`; skip the error surface
+      // here and let the rerun repaint the status from "checking".
+      if (!server.superseded) {
+        server.showStatus("failed");
         if (error instanceof UnsupportedJETLSVersionError) {
-          handleUnsupportedExecutable(error);
+          handleUnsupportedExecutable(server, error);
         } else {
-          handleSpawnError(error, baseCommand);
+          handleSpawnError(server, error, baseCommand);
         }
       }
       throw error;
     }
   }
 
-  if (deactivating) {
+  if (server.superseded) {
     return;
   }
-  statusBar.show("starting");
+  server.showStatus("starting");
 
   let serverOptions: ServerOptions;
 
   const transportOptions: TransportOptions = {
     startTimeoutMs: TIMEOUTS.serverStart,
     precompilationTimeoutMs: TIMEOUTS.precompilation,
-    appendLine: (message) => outputChannel.appendLine(message),
-    onPrecompiling: () => statusBar.show("precompiling"),
+    appendLine: (message) => server.outputChannel.appendLine(message),
+    onPrecompiling: () => server.showStatus("precompiling"),
     onProcessError: (error) => {
-      if (deactivating || restartRunner.active !== undefined) {
+      if (
+        deactivating ||
+        server.retired ||
+        server.restartRunner.active !== undefined
+      ) {
         return;
       }
       if (managedDepotPath === undefined) {
-        handleSpawnError(error, baseCommand);
+        handleSpawnError(server, error, baseCommand);
       } else {
-        handleManagedServerFailure(error, managedDepotPath);
+        handleManagedServerFailure(server, error, managedDepotPath);
       }
     },
     registerCancel: (cancel) => {
-      cancelServerStartup = cancel;
+      server.cancelServerStartup = cancel;
     },
   };
 
@@ -481,7 +752,7 @@ async function startLanguageServer() {
         port,
         transportOptions,
       );
-    outputChannel.appendLine(`[jetls-client] Using TCP socket mode`);
+    server.outputChannel.appendLine(`[jetls-client] Using TCP socket mode`);
   } else {
     // Default: pipe communication (Unix domain socket / named pipe).
     // The library generates the pipe name, appends `--pipe=<name>` (which the
@@ -518,34 +789,55 @@ async function startLanguageServer() {
     pull_diagnostics: true,
   };
 
+  // Decided when the client is created, so that workspace folder changes
+  // during a long setup are respected; later changes restart the server
+  // (see `reconcileFolderServers`).
+  const unscoped =
+    getEffectiveWorkspaceFolders(vscode.workspace.workspaceFolders ?? [])
+      .length <= 1;
+  const selectorFolder = unscoped ? undefined : folder;
+  const includeUnsavedDocuments = server.key === untitledOwnerKey();
+
   const clientOptions: LanguageClientOptions = {
+    workspaceFolder: folder,
     // Keep this selector as a static-registration fallback while jetls-client can
     // connect to independently installed JETLS versions. Once the extension manages
     // the `jetls` binary, rely only on server-side dynamic registration and remove it.
-    documentSelector: [
-      {
-        scheme: "file",
-        language: "julia",
-      },
-      {
-        scheme: "untitled",
-        language: "julia",
-      },
-      {
-        notebook: { notebookType: "jupyter-notebook" },
-        language: "julia",
-      },
-      // Sync the server-provided virtual documents (`jetls-*` schemes, e.g.
-      // TestRunner logs) so the server is notified when they are opened/closed.
-      // Language features are registered separately (see `DEFAULT_DOCUMENT_SELECTOR`)
-      // and do not target these schemes; this only drives document synchronization.
-      // Each new view's scheme must be listed here to receive sync notifications.
-      {
-        scheme: "jetls-testrunner-logs",
-      },
-    ],
+    documentSelector: createDocumentSelector(
+      selectorFolder,
+      includeUnsavedDocuments,
+    ),
+    // Every client shares the `jetls-client` id (which also names the
+    // `jetls-client.trace.server` setting), so keep collections apart.
+    diagnosticCollectionName: server.id,
     middleware: {
+      handleRegisterCapability: async (params, next) => {
+        const tokenSource = new vscode.CancellationTokenSource();
+        try {
+          await next(
+            scopeRegistrationParams(
+              params,
+              selectorFolder,
+              includeUnsavedDocuments,
+            ),
+            tokenSource.token,
+          );
+        } finally {
+          tokenSource.dispose();
+        }
+      },
       workspace: {
+        // Unlike a handler registered with `onRequest`, this survives the
+        // automatic restarts of vscode-languageclient, which reinstall its
+        // default handler. JETLS requests the configuration without a
+        // scope, so answer with the folder's settings.
+        configuration: (params) =>
+          params.items.map((item) =>
+            vscode.workspace.getConfiguration(
+              JETLS_CLIENT_SETTINGS_SECTION,
+              item.scopeUri ? vscode.Uri.parse(item.scopeUri) : folder?.uri,
+            ),
+          ),
         // The server registers `workspace/didChangeConfiguration` with the
         // section declared via `configuration_section` above, so the
         // configuration sync feature only fires when `jetls-client.settings`
@@ -554,7 +846,7 @@ async function startLanguageServer() {
         // and the replacement server pulls fresh configuration on initialize
         // anyway.
         didChangeConfiguration: (sections, next) => {
-          if (deactivating || restartRunner.pending) {
+          if (server.superseded) {
             return Promise.resolve();
           }
           return next(sections);
@@ -603,15 +895,17 @@ async function startLanguageServer() {
       },
     },
     initializationOptions,
-    outputChannel,
+    outputChannel: server.outputChannel,
   };
 
-  languageClient = new LanguageClient(
+  const languageClient = new JETLSLanguageClient(
     "jetls-client",
-    "JETLS Language Server",
+    getClientDisplayName(folder),
     serverOptions,
     clientOptions,
   );
+  server.client = languageClient;
+  server.unscoped = unscoped;
 
   // Surface server crashes and vscode-languageclient's automatic restarts in
   // the status bar. This fires for every state transition, but while the
@@ -621,18 +915,22 @@ async function startLanguageServer() {
   // vscode-languageclient initiated on its own, i.e. a crash-triggered stop
   // and the restart its error handler performs afterwards.
   languageClient.onDidChangeState((event) => {
-    if (deactivating || restartRunner.active !== undefined) {
+    if (
+      deactivating ||
+      server.retired ||
+      server.restartRunner.active !== undefined
+    ) {
       return;
     }
     switch (event.newState) {
       case State.Stopped:
-        statusBar.show("crashed");
+        server.showStatus("crashed");
         break;
       case State.Starting:
-        statusBar.show("restarting");
+        server.showStatus("restarting");
         break;
       case State.Running:
-        statusBar.show("ready");
+        server.showStatus("ready");
         break;
     }
   });
@@ -648,102 +946,111 @@ async function startLanguageServer() {
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     // If a restart request is queued, this failure is most likely the
-    // deliberate cancellation from `requestLanguageServerRestart`; skip the
-    // error surface here and let the rerun repaint the status from "checking".
-    if (!deactivating && !restartRunner.pending) {
+    // deliberate cancellation from `requestServerRestart`; skip the error
+    // surface here and let the rerun repaint the status from "checking".
+    if (!server.superseded) {
       if (managedDepotPath !== undefined) {
-        statusBar.showManagedFailure(managedFailureSummary(error));
-        handleManagedServerFailure(error, managedDepotPath);
+        statusBar.showManagedFailure(server.id, managedFailureSummary(error));
+        handleManagedServerFailure(server, error, managedDepotPath);
       } else {
-        statusBar.show("failed");
-        handleSpawnError(error, baseCommand);
+        server.showStatus("failed");
+        handleSpawnError(server, error, baseCommand);
       }
     }
     throw error;
   } finally {
-    cancelServerStartup = undefined;
+    server.cancelServerStartup = undefined;
   }
 
-  if (deactivating) {
+  if (deactivating || server.retired) {
     return;
   }
   const serverInfo = languageClient.initializeResult?.serverInfo;
   if (serverInfo) {
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] JETLS is ready! (${serverInfo.name} [version: ${serverInfo.version ?? "unknown"}])`,
     );
   } else {
-    outputChannel.appendLine("[jetls-client] JETLS is ready!");
+    server.outputChannel.appendLine("[jetls-client] JETLS is ready!");
   }
 
   if (managedDepotPath !== undefined) {
     const depotPath = managedDepotPath;
-    managedLastUsedRefresh = setInterval(() => {
+    server.managedLastUsedRefresh = setInterval(() => {
       void touchManagedInstallation(depotPath);
     }, LAST_USED_REFRESH_INTERVAL);
   }
 
   languageClient.onRequest(
-    "workspace/configuration",
-    (params: { items: { scopeUri?: string; section?: string | null }[] }) => {
-      const items = params.items || [];
-      const results = items.map((item) => {
-        const section = JETLS_CLIENT_SETTINGS_SECTION;
-        const scope = item.scopeUri
-          ? vscode.Uri.parse(item.scopeUri)
-          : undefined;
-        return vscode.workspace.getConfiguration(section, scope);
-      });
-      return results;
+    TextDocumentContentRefreshRequest.method,
+    (params: { uri: string }) => {
+      routing.refreshTextDocumentContent(vscode.Uri.parse(params.uri));
+      return null;
     },
   );
 
-  statusBar.show("ready");
+  server.showStatus("ready");
 }
 
-async function restartLanguageServer() {
-  if (deactivating) {
-    return;
-  }
-  if (languageClient?.needsStop()) {
-    statusBar.show("restarting");
-  }
+async function stopLanguageServer(server: FolderServer) {
+  stopManagedLastUsedRefresh(server);
   // A client that never reached the `Running` state (e.g. one left stuck
   // in `Starting` by a start timeout) cannot be stopped: `stop()` throws,
   // which used to abort — and thereby permanently block — every restart.
   // `stopClient` falls back to disposing such clients, so the restart
   // always proceeds with a fresh client.
-  await stopClient(languageClient, TIMEOUTS.serverStop, (message) =>
-    outputChannel.appendLine(message),
+  await stopClient(server.client, TIMEOUTS.serverStop, (message) =>
+    server.outputChannel.appendLine(message),
   );
-  await startLanguageServer();
 }
 
-const restartRunner = new CoalescingTaskRunner(restartLanguageServer);
+async function restartLanguageServer(server: FolderServer) {
+  if (deactivating || server.retired) {
+    return;
+  }
+  if (server.client?.needsStop()) {
+    server.showStatus("restarting");
+  }
+  await stopLanguageServer(server);
+  await startLanguageServer(server);
+}
 
-export function requestLanguageServerRestart(): void {
-  const lifecycle = restartRunner.run();
-  // Kill an in-flight version preflight so the rerun queued above can start
+function cancelServerStartup(server: FolderServer): void {
+  // Kill an in-flight version preflight so a queued rerun can start
   // immediately; otherwise the rerun would wait for the preflight to finish,
   // which can take up to `TIMEOUTS.precompilation` while precompiling.
-  void versionPreflight.terminate().catch((err) => {
+  void server.preflight.terminate().catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] Failed to terminate JETLS version check: ${message}.`,
     );
   });
   // Likewise kill a spawned server still waiting for its transport
   // connection; the transport turns this into a no-op once connected.
-  cancelServerStartup?.();
-  // And cancel an in-flight managed installation, which can run for
+  server.cancelServerStartup?.();
+  // And stop waiting for an in-flight managed setup, which can run for
   // minutes: the rerun queued above starts over from the current state.
-  managedSetupAbort?.abort();
+  server.managedSetupAbort?.abort();
+}
+
+function requestServerRestart(server: FolderServer): void {
+  if (deactivating || server.retired) {
+    return;
+  }
+  const lifecycle = server.restartRunner.run();
+  cancelServerStartup(server);
   void lifecycle.catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
-    outputChannel.appendLine(
+    server.outputChannel.appendLine(
       `[jetls-client] Failed to restart language server: ${message}.`,
     );
   });
+}
+
+export function requestLanguageServerRestart(): void {
+  for (const server of folderServers.values()) {
+    requestServerRestart(server);
+  }
 }
 
 // Set by `reinstallServer` and consumed by the next managed setup; it
@@ -751,39 +1058,29 @@ export function requestLanguageServerRestart(): void {
 // reinstall still installs from scratch.
 let forceManagedInstall = false;
 
-// Aborts the in-flight managed setup, so a restart or deactivation does
-// not wait behind a long installation; the cancelled installation only
-// strands its unpublished generation.
-let managedSetupAbort: AbortController | undefined;
-
-// Re-touches the running managed server's last-used markers: cleanup in
-// other windows judges liveness by them, and they otherwise only record
-// starts, which a long-lived session outlives.
-let managedLastUsedRefresh: NodeJS.Timeout | undefined;
-
-function stopManagedLastUsedRefresh(): void {
-  if (managedLastUsedRefresh !== undefined) {
-    clearInterval(managedLastUsedRefresh);
-    managedLastUsedRefresh = undefined;
+function stopManagedLastUsedRefresh(server: FolderServer): void {
+  if (server.managedLastUsedRefresh !== undefined) {
+    clearInterval(server.managedLastUsedRefresh);
+    server.managedLastUsedRefresh = undefined;
   }
 }
 
 /**
  * Reinstalls the managed JETLS from scratch: after a modal confirmation
- * the server restarts with the next managed setup forced to install a
- * fresh generation, ignoring the verified current one. Nothing is
- * deleted up front — superseded generations are cleaned up later — so a
- * failed reinstall leaves the previous installation in place and
+ * the servers using it restart with the next managed setup forced to
+ * install a fresh generation, ignoring the verified current one. Nothing
+ * is deleted up front — superseded generations are cleaned up later — so
+ * a failed reinstall leaves the previous installation in place and
  * surfaces the ordinary failure UI.
  */
 export async function reinstallServer(): Promise<void> {
   if (deactivating) {
     return;
   }
-  const serverConfig = getServerConfig(
-    vscode.workspace.getConfiguration("jetls-client"),
+  const managedServers = Array.from(folderServers.values()).filter((server) =>
+    isManagedExecutable(getFolderServerConfig(server.folder).executable),
   );
-  if (!isManagedExecutable(serverConfig.executable)) {
+  if (managedServers.length === 0) {
     void vscode.window.showInformationMessage(
       "JETLS managed installation is disabled by the executable setting.",
     );
@@ -805,19 +1102,108 @@ export async function reinstallServer(): Promise<void> {
     return;
   }
   forceManagedInstall = true;
-  requestLanguageServerRestart();
+  for (const server of managedServers) {
+    requestServerRestart(server);
+  }
 }
 
-export function restartOnServerConfigChange(): void {
-  const newConfig = getServerConfig(
-    vscode.workspace.getConfiguration("jetls-client"),
+export function restartOnServerConfigChange(
+  event: vscode.ConfigurationChangeEvent,
+): void {
+  const servers = Array.from(folderServers.values()).filter(
+    (server) =>
+      affectsServerConfig(event, server.folder?.uri) &&
+      hasServerConfigChanged(
+        server.serverConfig,
+        getFolderServerConfig(server.folder),
+      ),
   );
-  if (hasServerConfigChanged(currentServerConfig, newConfig)) {
-    vscode.window.showInformationMessage(
-      "JETLS configuration changed. Restarting language server...",
-    );
-    requestLanguageServerRestart();
+  if (servers.length === 0) {
+    return;
   }
+  vscode.window.showInformationMessage(
+    "JETLS configuration changed. Restarting language server...",
+  );
+  for (const server of servers) {
+    requestServerRestart(server);
+  }
+}
+
+async function disposeFolderServer(server: FolderServer): Promise<void> {
+  server.retired = true;
+  statusBar.clear(server.id);
+  cancelServerStartup(server);
+  await awaitWithTimeout(server.restartRunner.active, TIMEOUTS.serverStop);
+  await stopLanguageServer(server);
+}
+
+function retireFolderServer(server: FolderServer): void {
+  folderServers.delete(server.key);
+  const teardown: Promise<void> = disposeFolderServer(server).finally(() => {
+    if (retiringTeardowns.get(server.key) === teardown) {
+      retiringTeardowns.delete(server.key);
+    }
+  });
+  retiringTeardowns.set(server.key, teardown);
+}
+
+/**
+ * Brings the servers in line with the workspace folders: one server per
+ * top-level folder, or a single one when no folder is open. Removed
+ * folders' servers stop and added folders' servers start; the others only
+ * restart when the workspace switches between a single folder (whose
+ * server also handles files outside it) and multiple folders.
+ */
+export function reconcileFolderServers(): void {
+  if (deactivating) {
+    return;
+  }
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  const desiredFolders: (vscode.WorkspaceFolder | undefined)[] =
+    folders.length === 0 ? [undefined] : getEffectiveWorkspaceFolders(folders);
+  for (const folder of folders) {
+    const outermost = getOutermostWorkspaceFolder(folder, folders);
+    if (outermost !== folder) {
+      outputChannel.appendLine(
+        `[jetls-client] Workspace folder "${folder.name}" is nested in ` +
+          `"${outermost.name}" and is handled by its server.`,
+      );
+    }
+  }
+  const desiredKeys = new Set(desiredFolders.map(getClientKey));
+  for (const server of Array.from(folderServers.values())) {
+    if (!desiredKeys.has(server.key)) {
+      retireFolderServer(server);
+    }
+  }
+  const unscoped = desiredFolders.length === 1;
+  for (const folder of desiredFolders) {
+    const key = getClientKey(folder);
+    const existing = folderServers.get(key);
+    if (existing) {
+      existing.folder = folder;
+      if (existing.client !== undefined && existing.unscoped !== unscoped) {
+        requestServerRestart(existing);
+      }
+      continue;
+    }
+    const server = new FolderServer(folder);
+    folderServers.set(key, server);
+    void (retiringTeardowns.get(key) ?? Promise.resolve()).then(() =>
+      requestServerRestart(server),
+    );
+  }
+}
+
+/**
+ * Shows the output channel of the given server, falling back to the
+ * extension-level channel when the server is unknown or omitted.
+ */
+export function showOutputChannel(serverId?: string): void {
+  const server = Array.from(folderServers.values()).find(
+    (candidate) => candidate.id === serverId,
+  );
+  (server?.outputChannel ?? outputChannel).show();
 }
 
 /** Resolves to `false` when the wait timed out before the promise settled. */
@@ -841,19 +1227,18 @@ function awaitWithTimeout(
 
 export async function shutdownServerLifecycle(): Promise<void> {
   deactivating = true;
-  stopManagedLastUsedRefresh();
-  managedSetupAbort?.abort();
-  cancelServerStartup?.();
-  try {
-    await versionPreflight.terminate();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    outputChannel?.appendLine(
-      `[jetls-client] Failed to terminate JETLS version check: ${message}`,
-    );
+  for (const setup of managedSetups.values()) {
+    setup.abort();
   }
-  await awaitWithTimeout(restartRunner.active, TIMEOUTS.serverStop);
-  await stopClient(languageClient, TIMEOUTS.serverStop, (message) =>
-    outputChannel?.appendLine(message),
-  );
+  const servers = Array.from(folderServers.values());
+  folderServers.clear();
+  await Promise.allSettled([
+    ...servers.map(disposeFolderServer),
+    ...retiringTeardowns.values(),
+  ]);
+  for (const channel of folderOutputChannels.values()) {
+    channel.dispose();
+  }
+  folderOutputChannels.clear();
+  routing?.dispose();
 }

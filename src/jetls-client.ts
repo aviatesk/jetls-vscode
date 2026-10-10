@@ -3,12 +3,13 @@
 import * as vscode from "vscode";
 import { ExtensionContext, LogOutputChannel } from "vscode";
 
-import { affectsServerConfig } from "./server-config";
 import {
   activateServerLifecycle,
+  reconcileFolderServers,
   requestLanguageServerRestart,
   reinstallServer,
   restartOnServerConfigChange,
+  showOutputChannel,
   shutdownServerLifecycle,
 } from "./server-lifecycle";
 import { StartupStatusBar } from "./status-bar";
@@ -21,10 +22,16 @@ export function activate(context: ExtensionContext) {
   context.subscriptions.push(statusBar);
 
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (affectsServerConfig(event)) {
-        restartOnServerConfigChange();
-      }
+    vscode.workspace.onDidChangeConfiguration((event) =>
+      restartOnServerConfigChange(event),
+    ),
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      outputChannel.appendLine(
+        "[jetls-client] Workspace folders changed. Updating language servers...",
+      );
+      reconcileFolderServers();
     }),
   );
   context.subscriptions.push(
@@ -45,14 +52,16 @@ export function activate(context: ExtensionContext) {
 
   outputChannel = vscode.window.createOutputChannel("JETLS", { log: true });
   context.subscriptions.push(
-    vscode.commands.registerCommand("jetls-client.showOutput", () =>
-      outputChannel.show(),
+    vscode.commands.registerCommand(
+      "jetls-client.showOutput",
+      (serverId?: unknown) =>
+        showOutputChannel(typeof serverId === "string" ? serverId : undefined),
     ),
   );
 
   activateServerLifecycle(outputChannel, statusBar, context);
 
-  requestLanguageServerRestart();
+  reconcileFolderServers();
 }
 
 export async function deactivate() {
