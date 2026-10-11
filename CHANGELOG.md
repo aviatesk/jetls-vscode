@@ -25,7 +25,7 @@ This file describes changes delivered by extension updates, including updates to
 
 - Changes to resource-scoped launch settings now restart only the affected folder's server.
 
-- Each server's output (server logs and process stderr) now goes to its own `JETLS Language Server (<folder>)` output channel, keeping the `JETLS` channel for extension-level logs such as the managed installation output. Clicking the status bar item opens the channel of the server it currently reports.
+- Each server's output (server logs and process stderr) now goes to its own `JETLS Language Server (<folder>)` output channel, while the `JETLS` channel summarizes the whole window: the extension and VS Code versions, the managed installation and the Julia it uses, the workspace folder each server serves, and a one-line entry for each server's start, failure, crash, restart, and stop. Clicking the status bar item opens the channel of the server it currently reports.
 
 ## v2026.10.8
 

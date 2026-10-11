@@ -367,6 +367,7 @@ test("builds direct julia launch commands for the managed server", () => {
     env: {},
     depotPath: "/managed/depot",
     juliaPath: "/runtime/bin/julia",
+    juliaVersion: "1.12.2",
   };
   const commands = managedJETLSCommands(installation, "4");
   assert.equal(commands.command, "/runtime/bin/julia");
@@ -424,6 +425,7 @@ test("uses a verified current generation without reinstalling", async () => {
     });
 
     assert.equal(installation.juliaPath, fixture.juliaPath);
+    assert.equal(installation.juliaVersion, "1.12.2");
     assert.equal(installation.depotPath, generationPath);
     assert.equal(
       installation.env.JULIA_DEPOT_PATH,

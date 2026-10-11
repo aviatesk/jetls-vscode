@@ -28,6 +28,14 @@ export function getClientDisplayName(folder?: vscode.WorkspaceFolder): string {
     : "JETLS Language Server";
 }
 
+export function getWorkspaceFolderLocation(
+  folder: vscode.WorkspaceFolder,
+): string {
+  return folder.uri.scheme === "file"
+    ? folder.uri.fsPath
+    : folder.uri.toString();
+}
+
 export function workspaceFolderContains(
   parent: vscode.WorkspaceFolder,
   child: vscode.WorkspaceFolder,

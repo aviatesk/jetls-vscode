@@ -9,6 +9,7 @@ import {
   createDocumentSelector,
   getEffectiveWorkspaceFolders,
   getQueryParameter,
+  getWorkspaceFolderLocation,
   hasUriScheme,
   scopeRegistrationParams,
   workspaceFolderContains,
@@ -275,6 +276,21 @@ test("reads query parameters of server-generated virtual document URIs", () => {
   assert.equal(getQueryParameter(query, "stop"), "10");
   assert.equal(getQueryParameter(query, "index"), undefined);
   assert.equal(getQueryParameter("", "source"), undefined);
+});
+
+test("shows local folders as paths and other folders as URIs", () => {
+  const local = fileFolder("local", "project");
+  assert.equal(getWorkspaceFolderLocation(local), local.uri.fsPath);
+
+  const remote = fakeWorkspaceFolder("remote", {
+    scheme: "vscode-remote",
+    authority: "ssh-remote+host",
+    path: "/workspace/project",
+  });
+  assert.equal(
+    getWorkspaceFolderLocation(remote),
+    "vscode-remote://ssh-remote+host/workspace/project",
+  );
 });
 
 test("recognizes only strings with an explicit URI scheme", () => {

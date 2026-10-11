@@ -154,6 +154,7 @@ export interface ManagedJETLSInstallation {
   env: NodeJS.ProcessEnv;
   depotPath: string;
   juliaPath: string;
+  juliaVersion: string;
 }
 
 export interface JuliaVersion {
@@ -1708,7 +1709,7 @@ async function ensureRuntime(
   juliaPath: string,
   platform: NodeJS.Platform,
   runner: ProcessRunner,
-): Promise<string> {
+): Promise<{ generationPath: string; juliaVersion: string }> {
   let containerPath: string | undefined;
   try {
     throwIfCancelled(options.signal);
@@ -1729,7 +1730,7 @@ async function ensureRuntime(
         { retryable: false },
       );
     }
-    return await resolveGeneration(
+    const generationPath = await resolveGeneration(
       { containerPath, juliaPath, juliaVersion },
       options.environment,
       runner,
@@ -1741,6 +1742,7 @@ async function ensureRuntime(
       options.onInstallStep,
       options.onInstallOutput,
     );
+    return { generationPath, juliaVersion };
   } catch (error) {
     // A cancellation is not a failure; it passes through unclassified so
     // callers can suppress the failure UI.
@@ -1829,7 +1831,7 @@ export async function ensureManagedJETLS(
   const { platform, runner, storagePath, juliaPath } =
     await resolveManagedRuntime(options);
 
-  const generationPath = await ensureRuntime(
+  const { generationPath, juliaVersion } = await ensureRuntime(
     options,
     storagePath,
     juliaPath,
@@ -1840,5 +1842,6 @@ export async function ensureManagedJETLS(
     env: serverLaunchEnvironment(options.environment, generationPath, platform),
     depotPath: generationPath,
     juliaPath,
+    juliaVersion,
   };
 }

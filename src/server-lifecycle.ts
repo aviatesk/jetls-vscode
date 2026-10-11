@@ -25,6 +25,7 @@ import {
 import {
   ensureManagedJETLS,
   invalidateInstallStamp,
+  JETLS_REVISION,
   LAST_USED_REFRESH_INTERVAL,
   ManagedInstallationCancelledError,
   ManagedJETLSError,
@@ -52,8 +53,10 @@ import {
   createDocumentSelector,
   getClientDisplayName,
   getClientKey,
+  getClientLabel,
   getEffectiveWorkspaceFolders,
   getOutermostWorkspaceFolder,
+  getWorkspaceFolderLocation,
   scopeRegistrationParams,
 } from "./workspace-folders";
 
@@ -81,6 +84,14 @@ export function activateServerLifecycle(
   statusBar = bar;
   globalStoragePath = context.globalStorageUri.fsPath;
   deactivating = false;
+  const extensionVersion =
+    (context.extension.packageJSON as { version?: string }).version ??
+    "unknown";
+  outputChannel.appendLine(
+    `[jetls-client] JETLS Client ${extensionVersion} on VS Code ` +
+      `${vscode.version}, ${process.platform}-${process.arch}` +
+      (vscode.env.remoteName ? `, remote: ${vscode.env.remoteName}` : ""),
+  );
   routing = new LanguageClientRouting(context, (uri) => {
     const client = folderServerForUri(uri)?.client;
     return client?.isRunning() ? client : undefined;
@@ -172,6 +183,24 @@ class FolderServer {
       statusBar.show(this.id, status);
     }
   }
+
+  /**
+   * Logs a one-line lifecycle event to the extension-level channel, which
+   * summarizes every server; the details stay in the server's own channel.
+   */
+  logLifecycle(
+    message: string,
+    level: "info" | "warn" | "error" = "info",
+  ): void {
+    outputChannel[level](
+      `[jetls-client] ${getClientLabel(this.folder)}: ${message}`,
+    );
+  }
+}
+
+function firstLine(message: string): string {
+  const newline = message.indexOf("\n");
+  return newline === -1 ? message : message.slice(0, newline);
 }
 
 /**
@@ -246,9 +275,7 @@ function managedFailureSummary(err: Error): string {
   if (err instanceof ManagedJETLSError) {
     return err.summary;
   }
-  const newline = err.message.indexOf("\n");
-  const line = newline === -1 ? err.message : err.message.slice(0, newline);
-  return `Failed to start the managed JETLS server: ${line}`;
+  return `Failed to start the managed JETLS server: ${firstLine(err.message)}`;
 }
 
 function showManagedFailureNotification(err: Error, serverId?: string): void {
@@ -291,7 +318,7 @@ function showManagedFailureNotification(err: Error, serverId?: string): void {
 // is dropped: the next start then re-verifies that generation and
 // replaces it with a fresh one if broken.
 function handleManagedSetupFailure(err: Error): void {
-  outputChannel.appendLine(
+  outputChannel.error(
     `[jetls-client] Failed to set up the managed JETLS: ${err.message}`,
   );
   showManagedFailureNotification(err);
@@ -302,12 +329,13 @@ function handleManagedServerFailure(
   err: Error,
   depotPath: string,
 ): void {
-  server.outputChannel.appendLine(
+  server.outputChannel.error(
     `[jetls-client] Failed to start the managed JETLS: ${err.message}`,
   );
+  server.logLifecycle(managedFailureSummary(err), "error");
   void invalidateInstallStamp(depotPath).catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
-    server.outputChannel.appendLine(
+    server.outputChannel.warn(
       `[jetls-client] Failed to invalidate the managed install stamp: ${message}.`,
     );
   });
@@ -321,8 +349,12 @@ function handleUnsupportedExecutable(
   server: FolderServer,
   err: UnsupportedJETLSVersionError,
 ): void {
-  server.outputChannel.appendLine(
+  server.outputChannel.error(
     `[jetls-client] Failed to start JETLS: ${err.message}`,
+  );
+  server.logLifecycle(
+    `Failed to start JETLS: ${firstLine(err.message)}`,
+    "error",
   );
   const settingsButton = "Open settings";
   void vscode.window
@@ -345,10 +377,14 @@ function handleSpawnError(
 ): void {
   const errno = err as NodeJS.ErrnoException;
   if (errno.code === "ENOENT") {
-    server.outputChannel.appendLine(
+    server.outputChannel.error(
       `[jetls-client] Failed to start JETLS: Command not found: ${command}`,
     );
     server.outputChannel.appendLine(`[jetls-client] PATH: ${process.env.PATH}`);
+    server.logLifecycle(
+      `Failed to start JETLS: Command not found: ${command}`,
+      "error",
+    );
     void vscode.window.showErrorMessage(
       `JETLS executable not found: "${command}". Check the ` +
         "`jetls-client.executable` setting, or remove its `path`/command to " +
@@ -356,8 +392,12 @@ function handleSpawnError(
         "restart VS Code to refresh the PATH.",
     );
   } else {
-    server.outputChannel.appendLine(
+    server.outputChannel.error(
       `[jetls-client] Failed to start JETLS: ${err.message}`,
+    );
+    server.logLifecycle(
+      `Failed to start JETLS: ${firstLine(err.message)}`,
+      "error",
     );
   }
 }
@@ -439,7 +479,14 @@ class ManagedSetup {
         onInstallStep: () => this.beginInstallStep(),
       }))();
     void this.installation.then(
-      () => statusBar.clearManagedProgress(),
+      (installation) => {
+        statusBar.clearManagedProgress();
+        outputChannel.appendLine(
+          `[jetls-client] Using managed JETLS ${JETLS_REVISION} with ` +
+            `Julia ${installation.juliaVersion} (${installation.juliaPath}) ` +
+            `from ${installation.depotPath}`,
+        );
+      },
       (err) => {
         statusBar.clearManagedProgress();
         this.reportFailure(err instanceof Error ? err : new Error(String(err)));
@@ -572,11 +619,13 @@ async function setUpManagedJETLS(
     if (!server.superseded) {
       if (error instanceof ManagedInstallationCancelledError) {
         statusBar.showManagedCancelled(server.id);
+        server.logLifecycle("The JETLS installation was cancelled");
       } else {
         statusBar.showManagedFailure(server.id, managedFailureSummary(error));
-        server.outputChannel.appendLine(
+        server.outputChannel.error(
           `[jetls-client] Failed to set up the managed JETLS: ${error.message}`,
         );
+        server.logLifecycle(managedFailureSummary(error), "error");
       }
     }
     throw error;
@@ -624,7 +673,11 @@ async function startLanguageServer(server: FolderServer) {
       const error = err instanceof Error ? err : new Error(String(err));
       if (!server.superseded) {
         server.showStatus("failed");
-        server.outputChannel.appendLine(`[jetls-client] ${error.message}`);
+        server.outputChannel.error(`[jetls-client] ${error.message}`);
+        server.logLifecycle(
+          `Failed to start JETLS: ${firstLine(error.message)}`,
+          "error",
+        );
         vscode.window.showErrorMessage(error.message);
       }
       throw error;
@@ -702,6 +755,10 @@ async function startLanguageServer(server: FolderServer) {
     return;
   }
   server.showStatus("starting");
+  const commandDescription = managed
+    ? "managed"
+    : JSON.stringify([baseCommand, ...serveArgs]);
+  server.logLifecycle(`Starting JETLS (${commandDescription}, ${commChannel})`);
 
   let serverOptions: ServerOptions;
 
@@ -925,12 +982,15 @@ async function startLanguageServer(server: FolderServer) {
     switch (event.newState) {
       case State.Stopped:
         server.showStatus("crashed");
+        server.logLifecycle("JETLS stopped unexpectedly", "warn");
         break;
       case State.Starting:
         server.showStatus("restarting");
+        server.logLifecycle("Restarting JETLS");
         break;
       case State.Running:
         server.showStatus("ready");
+        server.logLifecycle("JETLS is ready");
         break;
     }
   });
@@ -970,8 +1030,12 @@ async function startLanguageServer(server: FolderServer) {
     server.outputChannel.appendLine(
       `[jetls-client] JETLS is ready! (${serverInfo.name} [version: ${serverInfo.version ?? "unknown"}])`,
     );
+    server.logLifecycle(
+      `JETLS is ready (${serverInfo.name} [version: ${serverInfo.version ?? "unknown"}])`,
+    );
   } else {
     server.outputChannel.appendLine("[jetls-client] JETLS is ready!");
+    server.logLifecycle("JETLS is ready");
   }
 
   if (managedDepotPath !== undefined) {
@@ -1000,7 +1064,7 @@ async function stopLanguageServer(server: FolderServer) {
   // `stopClient` falls back to disposing such clients, so the restart
   // always proceeds with a fresh client.
   await stopClient(server.client, TIMEOUTS.serverStop, (message) =>
-    server.outputChannel.appendLine(message),
+    server.outputChannel.warn(message),
   );
 }
 
@@ -1010,6 +1074,7 @@ async function restartLanguageServer(server: FolderServer) {
   }
   if (server.client?.needsStop()) {
     server.showStatus("restarting");
+    server.logLifecycle("Restarting JETLS");
   }
   await stopLanguageServer(server);
   await startLanguageServer(server);
@@ -1021,7 +1086,7 @@ function cancelServerStartup(server: FolderServer): void {
   // which can take up to `TIMEOUTS.precompilation` while precompiling.
   void server.preflight.terminate().catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
-    server.outputChannel.appendLine(
+    server.outputChannel.warn(
       `[jetls-client] Failed to terminate JETLS version check: ${message}.`,
     );
   });
@@ -1130,6 +1195,9 @@ export function restartOnServerConfigChange(
 }
 
 async function disposeFolderServer(server: FolderServer): Promise<void> {
+  if (!deactivating) {
+    server.logLifecycle("Stopping JETLS for the removed workspace folder");
+  }
   server.retired = true;
   statusBar.clear(server.id);
   cancelServerStartup(server);
@@ -1165,7 +1233,8 @@ export function reconcileFolderServers(): void {
     const outermost = getOutermostWorkspaceFolder(folder, folders);
     if (outermost !== folder) {
       outputChannel.appendLine(
-        `[jetls-client] Workspace folder "${folder.name}" is nested in ` +
+        `[jetls-client] Workspace folder "${folder.name}" ` +
+          `(${getWorkspaceFolderLocation(folder)}) is nested in ` +
           `"${outermost.name}" and is handled by its server.`,
       );
     }
@@ -1189,6 +1258,11 @@ export function reconcileFolderServers(): void {
     }
     const server = new FolderServer(folder);
     folderServers.set(key, server);
+    server.logLifecycle(
+      folder
+        ? `Workspace folder ${getWorkspaceFolderLocation(folder)}`
+        : "No workspace folder is open",
+    );
     void (retiringTeardowns.get(key) ?? Promise.resolve()).then(() =>
       requestServerRestart(server),
     );

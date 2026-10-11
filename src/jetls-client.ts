@@ -43,7 +43,7 @@ export function activate(context: ExtensionContext) {
     vscode.commands.registerCommand("jetls-client.reinstallServer", () => {
       void reinstallServer().catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
-        outputChannel.appendLine(
+        outputChannel.error(
           `[jetls-client] Failed to reinstall the managed JETLS: ${message}.`,
         );
       });
