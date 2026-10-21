@@ -8,7 +8,7 @@ This file describes changes delivered by extension updates, including updates to
 ## Unreleased
 
 - Commit: [`HEAD`](https://github.com/aviatesk/jetls-vscode/commit/HEAD)
-- Diff: [`v2026.10.18...HEAD`](https://github.com/aviatesk/jetls-vscode/compare/v2026.10.18...HEAD)
+- Diff: [`v2026.10.21...HEAD`](https://github.com/aviatesk/jetls-vscode/compare/v2026.10.21...HEAD)
 - Pinned JETLS: <!-- Set during release preparation; do not edit by hand. -->
 
 ### Language server
@@ -16,6 +16,23 @@ This file describes changes delivered by extension updates, including updates to
 <!-- Generated during release preparation; do not edit by hand. -->
 
 ### VS Code extension
+
+## v2026.10.21
+
+- Commit: [`v2026.10.21`](https://github.com/aviatesk/jetls-vscode/commit/v2026.10.21)
+- Diff: [`v2026.10.18...v2026.10.21`](https://github.com/aviatesk/jetls-vscode/compare/v2026.10.18...v2026.10.21)
+- Pinned JETLS: [`2026-10-21`](https://github.com/aviatesk/JETLS.jl/releases/tag/2026-10-21)
+
+### Language server
+
+Updated managed JETLS from `2026-10-18` to `2026-10-21`.
+
+- [Release notes for 2026-10-21](https://github.com/aviatesk/JETLS.jl/releases/tag/2026-10-21)
+- [Full server diff](https://github.com/aviatesk/JETLS.jl/compare/2026-10-18...2026-10-21)
+
+### VS Code extension
+
+No changes to the extension itself.
 
 ## v2026.10.18
 
