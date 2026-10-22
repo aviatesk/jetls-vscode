@@ -22,6 +22,7 @@ import {
 const SERVER_EXECUTE_COMMANDS = [
   "jetls.testrunner.run@testset",
   "jetls.testrunner.run@test",
+  "jetls.testrunner.cancel@testset",
   "jetls.testrunner.openLogs",
   "jetls.testrunner.clearResult",
   "jetls.openMacroExpansion",
