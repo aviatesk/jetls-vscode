@@ -98,7 +98,7 @@ through the `jetls-client.executable` setting:
     "jetls-client.executable": {
       "threads": "1", // the default is "auto"
       "env": {
-        "JULIAUP_CHANNEL": "1.13"
+        "JULIAUP_CHANNEL": "1.14-nightly+opt"
       }
     }
   }
@@ -238,9 +238,9 @@ For detailed configuration options and examples, see the
       ]
     },
     "testrunner": {
-      // Run tests with Julia 1.12 via juliaup
+      // Run tests with Julia 1.14 optimized build via juliaup
       "env": {
-        "JULIAUP_CHANNEL": "1.12"
+        "JULIAUP_CHANNEL": "1.14+opt"
       },
       // Run tests with 4 threads
       "julia_args": ["--threads=4"]
