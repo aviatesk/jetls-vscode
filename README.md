@@ -32,10 +32,11 @@ diagnostic, macro-aware go-to definition and such.
 ## Requirements
 
 - [VSCode](https://code.visualstudio.com/) v1.96.0 or higher
-- [Julia](https://julialang.org/downloads) v1.12.2 through 1.13.x, with the
+- [Julia](https://julialang.org/downloads) v1.12.2 through 1.14.x, with the
   `julia` command available on `PATH`
 
-JETLS does not support Julia 1.12.1 or earlier, nor Julia 1.14+/nightly.
+JETLS also runs on Julia 1.15 nightly builds, but may break at any time as Julia
+changes. It does not support Julia 1.12.1 or earlier.
 
 ## Installation
 
