@@ -76,7 +76,7 @@
                     "JULIAUP_CHANNEL": {
                       "type": "string",
                       "minLength": 1,
-                      "markdownDescription": "[juliaup](https://github.com/JuliaLang/juliaup) channel used to launch Julia (e.g. `1.13`, `release`, `lts`). Takes effect when the default `julia` command resolves to the juliaup launcher."
+                      "markdownDescription": "[juliaup](https://github.com/JuliaLang/juliaup) channel used to launch Julia (e.g. `1.14`, `release`, or `1.14+opt` for an optimized build, which requires juliaup v1.23 or later). Takes effect when the default `julia` command resolves to the juliaup launcher."
                     },
                     "JULIA_APPS_JULIA_CMD": {
                       "type": "string",
