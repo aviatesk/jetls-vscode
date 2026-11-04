@@ -547,5 +547,9 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.72.1"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "esbuild": true,
+    "@vscode/vsce-sign": true
+  }
 }
