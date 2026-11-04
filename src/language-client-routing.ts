@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import type { ExtensionContext } from "vscode";
 
-import type { LanguageClient } from "vscode-languageclient/node";
 import {
   ExecuteCommandRequest,
+  type LanguageClient,
   TextDocumentContentRequest,
-} from "vscode-languageserver-protocol";
+} from "vscode-languageclient/node";
 
 import {
   getQueryParameter,

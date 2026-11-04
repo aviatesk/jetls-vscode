@@ -2,13 +2,14 @@ import * as vscode from "vscode";
 import { LogOutputChannel } from "vscode";
 
 import {
+  CloseAction,
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
   State,
+  TextDocumentContentRefreshRequest,
   TransportKind,
 } from "vscode-languageclient/node";
-import { TextDocumentContentRefreshRequest } from "vscode-languageserver-protocol";
 
 import { CoalescingTaskRunner } from "./coalescing-task-runner";
 import { stopClient } from "./client-shutdown";
@@ -143,7 +144,7 @@ class FolderServer {
   readonly restartRunner = new CoalescingTaskRunner(() =>
     restartLanguageServer(this),
   );
-  client: LanguageClient | undefined;
+  client: JETLSLanguageClient | undefined;
   serverConfig: ServerConfig | null = null;
   /**
    * Whether the client handles every file rather than only those in its
@@ -243,10 +244,29 @@ function folderServerForUri(uri: vscode.Uri): FolderServer | undefined {
 
 type LanguageClientFeature = Parameters<LanguageClient["registerFeature"]>[0];
 
-// Every server would register the same VS Code commands and virtual
-// document providers, which VS Code rejects, so `LanguageClientRouting`
-// registers them once instead.
 class JETLSLanguageClient extends LanguageClient {
+  /**
+   * Whether the extension handles this client's failures itself: during its
+   * own start, and for good once that start fails or the extension stops the
+   * client. vscode-languageclient then neither restarts the server (see the
+   * `errorHandler` option) nor shows notifications, which would duplicate the
+   * extension's report or come from a discarded client (e.g. the start
+   * failure it reports when it kills a pipe server that a timed-out start
+   * left unconnected).
+   */
+  extensionOwned = true;
+
+  override error(
+    message: string,
+    data?: unknown,
+    showNotification: boolean | "force" = true,
+  ): void {
+    super.error(message, data, this.extensionOwned ? false : showNotification);
+  }
+
+  // Every server would register the same VS Code commands and virtual
+  // document providers, which VS Code rejects, so `LanguageClientRouting`
+  // registers them once instead.
   override registerFeature(feature: LanguageClientFeature): void {
     if (
       isExecuteCommandFeature(feature) ||
@@ -402,9 +422,10 @@ function handleSpawnError(
   }
 }
 
-// The stdio and pipe channels have no process-level startup monitoring
-// (the language client library owns the spawned process), so bound
-// `start()` itself and force-dispose the client on expiry.
+// vscode-languageclient owns the spawned server of the stdio and pipe
+// channels and has no startup timeout of its own, so bound `start()` itself,
+// keeping a server that hangs without exiting from wedging queued restarts,
+// and force-dispose the client on expiry.
 function startWithTimeout(
   client: LanguageClient,
   timeoutMs: number,
@@ -867,6 +888,17 @@ async function startLanguageServer(server: FolderServer) {
     // Every client shares the `jetls-client` id (which also names the
     // `jetls-client.trace.server` setting), so keep collections apart.
     diagnosticCollectionName: server.id,
+    // A connection closed while the extension owns the client belongs to its
+    // own failed start or stop; only later crashes get the library's default
+    // restart handling.
+    errorHandler: {
+      error: (error, message, count) =>
+        defaultErrorHandler.error(error, message, count),
+      closed: () =>
+        languageClient.extensionOwned
+          ? { action: CloseAction.DoNotRestart, handled: true }
+          : defaultErrorHandler.closed(),
+    },
     middleware: {
       handleRegisterCapability: async (params, next) => {
         const tokenSource = new vscode.CancellationTokenSource();
@@ -961,21 +993,24 @@ async function startLanguageServer(server: FolderServer) {
     serverOptions,
     clientOptions,
   );
+  const defaultErrorHandler = languageClient.createDefaultErrorHandler();
   server.client = languageClient;
   server.unscoped = unscoped;
 
   // Surface server crashes and vscode-languageclient's automatic restarts in
   // the status bar. This fires for every state transition, but while the
   // extension runs its own start/restart/shutdown flow (runner active, or
-  // deactivating) the startup code sets the status directly, so those
-  // transitions are skipped: what remains are the transitions
-  // vscode-languageclient initiated on its own, i.e. a crash-triggered stop
-  // and the restart its error handler performs afterwards.
+  // deactivating) or owns the client, the startup code sets the status
+  // directly, so those transitions are skipped: what remains are the
+  // transitions vscode-languageclient initiated on its own, i.e. a
+  // crash-triggered stop and the restart its error handler performs
+  // afterwards, which may fail.
   languageClient.onDidChangeState((event) => {
     if (
       deactivating ||
       server.retired ||
-      server.restartRunner.active !== undefined
+      server.restartRunner.active !== undefined ||
+      languageClient.extensionOwned
     ) {
       return;
     }
@@ -983,6 +1018,10 @@ async function startLanguageServer(server: FolderServer) {
       case State.Stopped:
         server.showStatus("crashed");
         server.logLifecycle("JETLS stopped unexpectedly", "warn");
+        break;
+      case State.StartFailed:
+        server.showStatus("failed");
+        server.logLifecycle("JETLS failed to restart", "error");
         break;
       case State.Starting:
         server.showStatus("restarting");
@@ -1025,6 +1064,7 @@ async function startLanguageServer(server: FolderServer) {
   if (deactivating || server.retired) {
     return;
   }
+  languageClient.extensionOwned = false;
   const serverInfo = languageClient.initializeResult?.serverInfo;
   if (serverInfo) {
     server.outputChannel.appendLine(
@@ -1058,6 +1098,9 @@ async function startLanguageServer(server: FolderServer) {
 
 async function stopLanguageServer(server: FolderServer) {
   stopManagedLastUsedRefresh(server);
+  if (server.client !== undefined) {
+    server.client.extensionOwned = true;
+  }
   // A client that never reached the `Running` state (e.g. one left stuck
   // in `Starting` by a start timeout) cannot be stopped: `stop()` throws,
   // which used to abort — and thereby permanently block — every restart.

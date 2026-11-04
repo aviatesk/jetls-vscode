@@ -26,9 +26,10 @@ export const PREFLIGHT_STDOUT_LIMIT = 64 * 1024;
 export const TIMEOUTS = {
   /**
    * Budget for Julia precompilation: bounds the whole version preflight,
-   * re-arms the serve startup countdown when precompilation is detected, and
-   * bounds the managed installation's post-install `jetls version` pin check,
-   * which loads from the caches the installation just precompiled.
+   * re-arms the socket channel's startup countdown when precompilation is
+   * detected, and bounds the managed installation's post-install
+   * `jetls version` pin check, which loads from the caches the installation
+   * just precompiled.
    */
   precompilation: 5 * 60 * 1000,
   /**
@@ -37,9 +38,9 @@ export const TIMEOUTS = {
    */
   processTermination: 5 * 1000,
   /**
-   * Budget for server startup without precompilation. For the socket and pipe
-   * channels this spans spawn until the transport connection is established;
-   * for stdio it bounds the whole `LanguageClient.start()` call.
+   * Budget for server startup without precompilation. For the socket channel
+   * this spans spawn until the transport connection is established; for stdio
+   * and pipe it bounds the whole `LanguageClient.start()` call.
    */
   serverStart: 60 * 1000,
   /**

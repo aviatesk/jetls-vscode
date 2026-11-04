@@ -17,6 +17,15 @@ This file describes changes delivered by extension updates, including updates to
 
 ### VS Code extension
 
+#### Changed
+
+- `vscode-languageclient` has been updated from 10.1.2 to 11.0.0.
+  Among its fixes, diagnostics of an open file now recover after a failed diagnostics request instead of staying stale until the file is reopened.
+
+#### Fixed
+
+- Fixed startup failures being reported only after a 60-second timeout when JETLS exits before connecting over the `pipe` communication channel (the default); they are now reported immediately.
+
 ## v2026.11.4
 
 - Commit: [`v2026.11.4`](https://github.com/aviatesk/jetls-vscode/commit/v2026.11.4)
