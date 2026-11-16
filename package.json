@@ -4,7 +4,7 @@
   "description": "A new language server for Julia",
   "author": "Shuhei Kadowaki",
   "license": "MIT",
-  "version": "2026.11.14",
+  "version": "2026.11.16",
   "repository": {
     "type": "git",
     "url": "https://github.com/aviatesk/jetls-vscode"
